@@ -21,7 +21,7 @@ public class MeshDeformer : MonoBehaviour
             float distance = Vector3.Distance(worldPoint, worldVertex);
             if (distance < 0.2f)
             {
-                displacedVertices[i] += (displacedVertices[i].normalized) * force * 0.003f;
+                displacedVertices[i] += (displacedVertices[i].normalized) * force * 0.3f;
             }
         }
         mesh.vertices = displacedVertices;

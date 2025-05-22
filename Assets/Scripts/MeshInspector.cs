@@ -30,9 +30,9 @@ public class NewMonoBehaviourScript : MonoBehaviour
         Vector3[] vertices = mesh.vertices;
         for (int i = 0; i < 515; i += 3)
         {
-           // vertices[i] += 0.0001f * Mathf.Sin(Time.time) * Vector3.up;
-           // mesh.vertices = vertices;
-           // mesh.RecalculateNormals();
+        //    vertices[i] += 0.005f * Mathf.Sin(Time.time) * Vector3.up;
+        //    mesh.vertices = vertices;
+        //    mesh.RecalculateNormals();
         }
         // for (int i = 0; i < vertices.Length; i++)
         // {

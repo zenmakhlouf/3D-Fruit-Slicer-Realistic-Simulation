@@ -13,8 +13,8 @@ public class SimpleCameraController : MonoBehaviour
     {
         if (Input.GetMouseButton(1))
         {
-            rotationX += Input.GetAxis("Mouse X") * lookSpeed;
-            rotationY -= Input.GetAxis("Mouse Y") * lookSpeed;
+            rotationX += Input.GetAxis("Mouse X") * lookSpeed * 5;
+            rotationY -= Input.GetAxis("Mouse Y") * lookSpeed * 5;
             rotationY = Mathf.Clamp(rotationY, -90, 90);
             transform.localRotation = Quaternion.Euler(rotationY, rotationX, 0);
         }
