@@ -1,50 +1,93 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Manages a collection of particles and constraints to simulate a physical object.
+/// Runs the physics simulation loop.
+/// </summary>
 public class Body : MonoBehaviour
 {
     public List<Particle> particles = new List<Particle>();
     public List<DistanceConstraint> constraints = new List<DistanceConstraint>();
 
+    [Header("Simulation Settings")]
     public Vector3 gravity = new Vector3(0, -9.81f, 0);
-    public float stepSize = 0.02f;
-    public int solverIterations = 5;
+    public float fixedTimeStep = 0.02f; // Duration of each physics step
+    public int solverIterations = 10;   // Number of times constraints are solved per step
+    public float groundRestitution = 0.5f; // Bounciness of the ground (0-1)
+
+    private float timeAccumulator = 0.0f; // Accumulates game time for fixed physics updates
 
     void Update()
     {
-        if (particles.Count < 8)
-            Debug.Log("Body particles still not populated: " + particles.Count);
-        Simulate(Time.deltaTime);
-        
+        // Use a fixed time step for stable and consistent physics simulation
+        timeAccumulator += Time.deltaTime;
+        while (timeAccumulator >= fixedTimeStep)
+        {
+            SimulatePhysicsStep(fixedTimeStep);
+            timeAccumulator -= fixedTimeStep;
+        }
     }
 
-    void Simulate(float dt)
+    void SimulatePhysicsStep(float deltaTime)
     {
-        foreach (var p in particles)
+        // 1. Integrate particle positions (apply forces, update velocity and position)
+        foreach (Particle p in particles)
         {
-            p.Integrate(dt, gravity);
-            if (p.position.y < 0.0f)
-            {
-                p.position.y = 0.0f;
-                p.prevPosition.y = 0.0f;
-            }
+            p.Integrate(deltaTime, gravity);
         }
 
-
-            for (int i = 0; i < solverIterations; i++)
-                foreach (var c in constraints)
-                    c.Solve();
+        // 2. Solve all constraints iteratively to enforce shape and connections
+        for (int i = 0; i < solverIterations; i++)
+        {
+            foreach (DistanceConstraint constraint in constraints)
+            {
+                constraint.Solve();
+            }
+            // Apply ground collision as a hard constraint within the solver loop
+            foreach (Particle p in particles)
+            {
+                ApplyGroundCollision(p);
+            }
+        }
     }
+
+    void ApplyGroundCollision(Particle particle)
+    {
+        if (particle.position.y < 0.0f)
+        {
+            // Move particle to be exactly on the ground
+            particle.position.y = 0.0f;
+
+            // Adjust previous position to simulate a bounce with Verlet integration.
+            // This effectively reflects the particle's vertical velocity component.
+            // Example: If prevPos.y = 0.1 (above ground) and particle integrated to -0.05.
+            // After clamping particle.position.y = 0.
+            // Effective velocity before bounce was (0 - 0.1) = -0.1 (using current pos and original prevPos).
+            // New prevPos.y becomes 0 + (-0.1 * groundRestitution) = -0.05 (if restitution is 0.5).
+            // Next frame, velocity estimate is (0 - (-0.05)) = 0.05, so it moves up.
+            float velocityYEstimate = particle.position.y - particle.prevPosition.y; // Uses new particle.position.y (0)
+            particle.prevPosition.y = particle.position.y + velocityYEstimate * groundRestitution;
+        }
+    }
+
     void OnDrawGizmos()
     {
-        if (particles == null) return;
+        if (particles == null || !Application.isPlaying) return; // Only draw if particles exist and in play mode
 
+        // Draw particles
         Gizmos.color = Color.yellow;
-        foreach (var p in particles)
-            Gizmos.DrawSphere(p.position, 0.05f);
+        foreach (Particle p in particles)
+        {
+            if (p != null) Gizmos.DrawSphere(p.position, 0.05f);
+        }
 
+        // Draw constraints
         Gizmos.color = Color.cyan;
-        foreach (var c in constraints)
-            Gizmos.DrawLine(c.p1.position, c.p2.position);
+        foreach (DistanceConstraint c in constraints)
+        {
+            if (c != null && c.p1 != null && c.p2 != null)
+                Gizmos.DrawLine(c.p1.position, c.p2.position);
+        }
     }
 }
