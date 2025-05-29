@@ -18,41 +18,41 @@ public class Body : MonoBehaviour
 
     private float timeAccumulator = 0.0f; // Accumulates game time for fixed physics updates
 
-    void Update()
-    {
-        // Use a fixed time step for stable and consistent physics simulation
-        timeAccumulator += Time.deltaTime;
-        while (timeAccumulator >= fixedTimeStep)
-        {
-            SimulatePhysicsStep(fixedTimeStep);
-            timeAccumulator -= fixedTimeStep;
-        }
-    }
+    // void Update()
+    // {
+    //     // Use a fixed time step for stable and consistent physics simulation
+    //     timeAccumulator += Time.deltaTime;
+    //     while (timeAccumulator >= fixedTimeStep)
+    //     {
+    //         SimulatePhysicsStep(fixedTimeStep);
+    //         timeAccumulator -= fixedTimeStep;
+    //     }
+    // }
 
-    void SimulatePhysicsStep(float deltaTime)
-    {
-        // 1. Integrate particle positions (apply forces, update velocity and position)
-        foreach (Particle p in particles)
-        {
-            p.Integrate(deltaTime, gravity);
-        }
+    // void SimulatePhysicsStep(float deltaTime)
+    // {
+    //     // 1. Integrate particle positions (apply forces, update velocity and position)
+    //     foreach (Particle p in particles)
+    //     {
+    //         p.Integrate(deltaTime, gravity);
+    //     }
 
-        // 2. Solve all constraints iteratively to enforce shape and connections
-        for (int i = 0; i < solverIterations; i++)
-        {
-            foreach (DistanceConstraint constraint in constraints)
-            {
-                constraint.Solve();
-            }
-            // Apply ground collision as a hard constraint within the solver loop
-            foreach (Particle p in particles)
-            {
-                ApplyGroundCollision(p);
-            }
-        }
-    }
+    //     // 2. Solve all constraints iteratively to enforce shape and connections
+    //     for (int i = 0; i < solverIterations; i++)
+    //     {
+    //         foreach (DistanceConstraint constraint in constraints)
+    //         {
+    //             constraint.Solve();
+    //         }
+    //         // Apply ground collision as a hard constraint within the solver loop
+    //         foreach (Particle p in particles)
+    //         {
+    //             ApplyGroundCollision(p);
+    //         }
+    //     }
+    // }
 
-    void ApplyGroundCollision(Particle particle)
+   public void ApplyGroundCollision(Particle particle)
     {
         if (particle.position.y < 0.0f)
         {
