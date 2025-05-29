@@ -1,42 +1,37 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-/// <summary>
-/// Generates particles and constraints for a sphere-shaped soft body.
-/// </summary>
-[RequireComponent(typeof(Body))]
 public class SphereBody : MonoBehaviour
 {
     [Header("Sphere Parameters")]
     [Range(0.1f, 5f)]
-    public float radius = 0.75f;
+    public float radius = 0.75f;                // Radius of the sphere
 
     [Header("Particle Generation")]
     public SphereGenerationMethod generationMethod = SphereGenerationMethod.FibonacciSphere_Surface;
     [Range(3, 15)]
-    public int resolution = 5; // Influences particle count and distribution
-    public bool addCenterParticleForFibonacci = true;
+    public int resolution = 5;                  // Controls particle density
+    public bool addCenterParticleForFibonacci = true; // Add a central particle for Fibonacci method
 
     [Header("Physics Properties")]
     [Range(0.01f, 10f)]
-    public float totalMass = 1f;
+    public float totalMass = 1f;                // Total mass distributed across particles
     [Range(0.01f, 1.0f)]
-    public float surfaceStiffness = 0.5f; // Stiffness for springs connecting surface particles
+    public float surfaceStiffness = 0.5f;       // Stiffness for surface springs
     [Range(0.01f, 1.0f)]
-    public float volumeStiffness = 0.8f;  // Stiffness for springs connecting to a center particle
+    public float volumeStiffness = 0.8f;        // Stiffness for volume springs (e.g., to center)
 
     [Header("Spring Connectivity")]
     [Range(1.1f, 3.0f)]
-    public float connectionRadiusMultiplier = 2.0f; // Factor for determining spring connection distance
+    public float connectionRadiusMultiplier = 2.0f; // Multiplier for spring connection distance
 
     private Body body;
-    [System.NonSerialized] // Not saved, set at runtime
-    public int centerParticlePhysicsIndex = -1; // Index of the center particle, if used. -1 if none.
+    public int centerParticlePhysicsIndex = -1; // Index of the center particle, if added
 
     public enum SphereGenerationMethod
     {
-        VolumetricGrid,         // Particles arranged in a grid, then culled to sphere shape
-        FibonacciSphere_Surface // Particles evenly distributed on the sphere's surface
+        VolumetricGrid,
+        FibonacciSphere_Surface
     }
 
     void Start()
@@ -61,19 +56,21 @@ public class SphereBody : MonoBehaviour
     {
         if (body == null) return;
 
+        // Clear existing particles and constraints
         body.particles.Clear();
         body.constraints.Clear();
         centerParticlePhysicsIndex = -1;
 
         List<Particle> localParticleList = new List<Particle>();
 
+        // Generate particles based on the selected method
         switch (generationMethod)
         {
             case SphereGenerationMethod.VolumetricGrid:
                 GenerateVolumetricGridParticles(localParticleList);
                 break;
             case SphereGenerationMethod.FibonacciSphere_Surface:
-                int numPoints = 10 + (resolution * resolution * resolution / 2); // Heuristic for point count
+                int numPoints = 10 + (resolution * resolution * resolution / 2);
                 if (resolution <= 3) numPoints = 10 + resolution * 5;
                 else if (resolution <= 5) numPoints = 20 + resolution * 8;
                 else numPoints = 40 + resolution * 10;
@@ -87,48 +84,69 @@ public class SphereBody : MonoBehaviour
             return;
         }
 
-        float massPerParticle = (localParticleList.Count > 0) ? totalMass / localParticleList.Count : totalMass;
+        // Distribute total mass across particles
+        float massPerParticle = totalMass / localParticleList.Count;
         foreach (var p in localParticleList)
         {
             p.mass = massPerParticle;
-            body.particles.Add(p);
+            p.body = this.GetComponent<Body>();             // Set body reference
+            p.collisionRadius = radius / resolution;       // Set collision radius
+            body.particles.Add(p);                         // Add to body
         }
 
-        if (generationMethod == SphereGenerationMethod.FibonacciSphere_Surface && addCenterParticleForFibonacci && body.particles.Count > 0)
+        // Add an optional center particle for Fibonacci sphere
+        if (generationMethod == SphereGenerationMethod.FibonacciSphere_Surface &&
+            addCenterParticleForFibonacci && body.particles.Count > 0)
         {
             Vector3 centerWorldPos = transform.TransformPoint(Vector3.zero);
-            Particle centerP = new Particle(centerWorldPos, massPerParticle * 2f, false); // Center particle can be heavier
+            Particle centerP = new Particle(centerWorldPos, massPerParticle * 2f, false);
+            centerP.body = this.GetComponent<Body>();       // Set body reference
+            centerP.collisionRadius = radius / resolution;  // Set collision radius
             body.particles.Add(centerP);
             centerParticlePhysicsIndex = body.particles.Count - 1;
 
+            // Connect center particle to all surface particles
             for (int i = 0; i < centerParticlePhysicsIndex; i++)
-            { // Connect surface particles to center
-                body.constraints.Add(new DistanceConstraint(body.particles[i], centerP, volumeStiffness));
+            {
+                body.constraints.Add(new DistanceConstraint(
+                    body.particles[i],
+                    centerP,
+                    volumeStiffness));
             }
         }
 
+        // Connect surface particles with springs
         ConnectSurfaceParticles();
 
-        Debug.Log($"SphereBody '{gameObject.name}': {body.particles.Count} particles (CenterIdx: {centerParticlePhysicsIndex}), {body.constraints.Count} constraints.");
+        Debug.Log($"SphereBody '{gameObject.name}': {body.particles.Count} particles " +
+                  $"(CenterIdx: {centerParticlePhysicsIndex}), {body.constraints.Count} constraints.");
     }
 
     void ConnectSurfaceParticles()
     {
         if (body.particles.Count <= 1) return;
 
-        int numSurfaceParticlesToConsider = (centerParticlePhysicsIndex != -1) ? centerParticlePhysicsIndex : body.particles.Count;
-        if (numSurfaceParticlesToConsider <= 1) return;
+        // Determine the number of surface particles (exclude center if present)
+        int numSurfaceParticles = (centerParticlePhysicsIndex != -1)
+            ? centerParticlePhysicsIndex
+            : body.particles.Count;
+        if (numSurfaceParticles <= 1) return;
 
-        float estimatedSpacing = Mathf.Sqrt((4 * Mathf.PI * radius * radius) / numSurfaceParticlesToConsider) * 0.8f;
+        // Estimate average spacing and set connection distance
+        float estimatedSpacing = Mathf.Sqrt((4 * Mathf.PI * radius * radius) / numSurfaceParticles) * 0.8f;
         float connectionDistance = estimatedSpacing * connectionRadiusMultiplier;
 
-        for (int i = 0; i < numSurfaceParticlesToConsider; i++)
+        // Add springs between nearby surface particles
+        for (int i = 0; i < numSurfaceParticles; i++)
         {
-            for (int j = i + 1; j < numSurfaceParticlesToConsider; j++)
+            for (int j = i + 1; j < numSurfaceParticles; j++)
             {
                 if (Vector3.Distance(body.particles[i].position, body.particles[j].position) < connectionDistance)
                 {
-                    body.constraints.Add(new DistanceConstraint(body.particles[i], body.particles[j], surfaceStiffness));
+                    body.constraints.Add(new DistanceConstraint(
+                        body.particles[i],
+                        body.particles[j],
+                        surfaceStiffness));
                 }
             }
         }
@@ -144,10 +162,13 @@ public class SphereBody : MonoBehaviour
                 for (int k = -resolution; k <= resolution; k++)
                 {
                     Vector3 offset = new Vector3(i, j, k) * step;
-                    if (offset.magnitude <= radius * 1.05f)
-                    { // Include particles slightly outside for better surface
+                    if (offset.magnitude <= radius * 1.05f) // Slightly larger to ensure full coverage
+                    {
                         Vector3 worldPos = transform.TransformPoint(offset);
-                        particleList.Add(new Particle(worldPos, 1f)); // Mass set later
+                        Particle p = new Particle(worldPos, 1f);
+                        p.body = this.GetComponent<Body>();         // Set body reference
+                        p.collisionRadius = radius / resolution;    // Set collision radius
+                        particleList.Add(p);
                     }
                 }
             }
@@ -156,18 +177,24 @@ public class SphereBody : MonoBehaviour
 
     private void GenerateFibonacciSphereParticles(List<Particle> particleList, int numPoints)
     {
-        if (numPoints <= 0) numPoints = 20; // Min points
+        if (numPoints <= 0) numPoints = 20;
         float goldenAngle = Mathf.PI * (3f - Mathf.Sqrt(5f));
 
         for (int i = 0; i < numPoints; i++)
         {
-            float y = 1 - (i / (float)(numPoints - 1)) * 2;  // y from 1 down to -1
-            float rAtY = Mathf.Sqrt(1 - y * y);              // Radius of circle at this y
-            float theta = goldenAngle * i;
+            float y = 1 - (i / (float)(numPoints - 1)) * 2;        // Distribute along y-axis
+            float rAtY = Mathf.Sqrt(1 - y * y);                     // Radius at this y-level
+            float theta = goldenAngle * i;                          // Angle using golden ratio
 
-            Vector3 localPos = new Vector3(Mathf.Cos(theta) * rAtY, y, Mathf.Sin(theta) * rAtY) * radius;
+            Vector3 localPos = new Vector3(
+                Mathf.Cos(theta) * rAtY,
+                y,
+                Mathf.Sin(theta) * rAtY) * radius;
             Vector3 worldPos = transform.TransformPoint(localPos);
-            particleList.Add(new Particle(worldPos, 1f)); // Mass set later
+            Particle p = new Particle(worldPos, 1f);
+            p.body = this.GetComponent<Body>();         // Set body reference
+            p.collisionRadius = radius / resolution;    // Set collision radius
+            particleList.Add(p);
         }
     }
 }
