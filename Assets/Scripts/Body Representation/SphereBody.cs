@@ -97,7 +97,7 @@ public class SphereBody : MonoBehaviour
         if (generationMethod == SphereGenerationMethod.FibonacciSphere_Surface && addCenterParticleForFibonacci && body.particles.Count > 0)
         {
             Vector3 centerWorldPos = transform.TransformPoint(Vector3.zero);
-            Particle centerP = new Particle(centerWorldPos, massPerParticle * 2f, false); // Center particle can be heavier
+            Particle centerP = new Particle(centerWorldPos, massPerParticle * 2f, radius * 0.5f, false); // Center particle can be heavier
             body.particles.Add(centerP);
             centerParticlePhysicsIndex = body.particles.Count - 1;
 

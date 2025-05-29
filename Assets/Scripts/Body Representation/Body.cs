@@ -16,7 +16,36 @@ public class Body : MonoBehaviour
     public int solverIterations = 10;   // Number of times constraints are solved per step
     public float groundRestitution = 0.5f; // Bounciness of the ground (0-1)
 
+    [Header("Initial Conditions")]
+    public Vector3 initialVelocity = Vector3.zero;
+    public Vector3 initialAcceleration = Vector3.zero;
+    public Vector3 initialForce = Vector3.zero;
+
     private float timeAccumulator = 0.0f; // Accumulates game time for fixed physics updates
+    private Vector3 currentForce = Vector3.zero;
+
+    void Start()
+    {
+        // Register with collision manager
+        if (CollisionManager.Instance != null)
+        {
+            CollisionManager.Instance.RegisterBody(this);
+        }
+
+        // Apply initial conditions
+        ApplyForce(initialForce);
+        SetVelocity(initialVelocity);
+        SetAcceleration(initialAcceleration);
+    }
+
+    void OnDestroy()
+    {
+        // Unregister from collision manager
+        if (CollisionManager.Instance != null)
+        {
+            CollisionManager.Instance.UnregisterBody(this);
+        }
+    }
 
     void Update()
     {
@@ -34,7 +63,9 @@ public class Body : MonoBehaviour
         // 1. Integrate particle positions (apply forces, update velocity and position)
         foreach (Particle p in particles)
         {
-            p.Integrate(deltaTime, gravity);
+            // Calculate total force for this particle
+            Vector3 totalForce = gravity + currentForce;
+            p.Integrate(deltaTime, totalForce);
         }
 
         // 2. Solve all constraints iteratively to enforce shape and connections
@@ -52,6 +83,47 @@ public class Body : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Applies a force to all particles in the body
+    /// </summary>
+    public void ApplyForce(Vector3 force)
+    {
+        currentForce = force;
+    }
+
+    /// <summary>
+    /// Adds a force to the current force being applied
+    /// </summary>
+    public void AddForce(Vector3 force)
+    {
+        currentForce += force;
+    }
+
+    /// <summary>
+    /// Sets the velocity of all particles in the body
+    /// </summary>
+    public void SetVelocity(Vector3 velocity)
+    {
+        foreach (Particle p in particles)
+        {
+            p.prevPosition = p.position - velocity * fixedTimeStep;
+        }
+    }
+
+    /// <summary>
+    /// Sets the acceleration of all particles in the body
+    /// </summary>
+    public void SetAcceleration(Vector3 acceleration)
+    {
+        foreach (Particle p in particles)
+        {
+            // For Verlet integration, we need to adjust the previous position
+            // to achieve the desired acceleration
+            Vector3 currentVelocity = (p.position - p.prevPosition) / fixedTimeStep;
+            p.prevPosition = p.position - (currentVelocity + acceleration * fixedTimeStep) * fixedTimeStep;
+        }
+    }
+
     void ApplyGroundCollision(Particle particle)
     {
         if (particle.position.y < 0.0f)
@@ -61,11 +133,6 @@ public class Body : MonoBehaviour
 
             // Adjust previous position to simulate a bounce with Verlet integration.
             // This effectively reflects the particle's vertical velocity component.
-            // Example: If prevPos.y = 0.1 (above ground) and particle integrated to -0.05.
-            // After clamping particle.position.y = 0.
-            // Effective velocity before bounce was (0 - 0.1) = -0.1 (using current pos and original prevPos).
-            // New prevPos.y becomes 0 + (-0.1 * groundRestitution) = -0.05 (if restitution is 0.5).
-            // Next frame, velocity estimate is (0 - (-0.05)) = 0.05, so it moves up.
             float velocityYEstimate = particle.position.y - particle.prevPosition.y; // Uses new particle.position.y (0)
             particle.prevPosition.y = particle.position.y + velocityYEstimate * groundRestitution;
         }

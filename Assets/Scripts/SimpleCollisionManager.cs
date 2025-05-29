@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using UnityEditor;
-public class CollisionManager : MonoBehaviour
+public class SimpleCollisionManager : MonoBehaviour
 {
     public List<SimpleCollider> colliders;
 
