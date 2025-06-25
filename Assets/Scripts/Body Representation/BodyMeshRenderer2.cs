@@ -1,0 +1,147 @@
+﻿using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+
+/// <summary>
+/// هذا السكربت يربط الجسيمات (Particles) بنقاط شبكة الميش (Mesh)
+/// ليقوم بتحديث شكل المجسم بشكل ناعم أثناء المحاكاة.
+/// </summary>
+[RequireComponent(typeof(MeshFilter))]
+[RequireComponent(typeof(Body))]
+public class BodyMeshRenderer2 : MonoBehaviour
+{
+    private Mesh mesh;
+    private Vector3[] originalVertices;         // النسخة الأصلية من نقاط الشبكة
+    private Vector3[] deformedVertices;         // النسخة المعدّلة بناءً على الجسيمات
+    private Body body;
+    private Transform cachedTransform;
+
+    // كل نقطة في الشبكة تتأثر بجسيمات قريبة منها
+    private struct Influence
+    {
+        public int particleIndex;
+        public float weight;
+    }
+
+    private List<Influence>[] vertexInfluences; // جدول يربط كل نقطة بجسيمات مؤثرة عليها
+    private bool isInitialized = false;
+
+    [Header("Mesh Binding Parameters")]
+    public float influenceRadius = 0.3f;        // نصف قطر التأثير
+    public int maxInfluencers = 2;              // الحد الأقصى للجسيمات المؤثرة على كل نقطة
+    public float updateInterval = 0.01f;        // الزمن بين تحديثات الشكل (مثلاً 0.02 = 50FPS)
+
+    private float timer = 0f;
+
+    void Start()
+    {
+        body = GetComponent<Body>();
+        cachedTransform = transform;
+
+        MeshFilter meshFilter = GetComponent<MeshFilter>();
+        if (meshFilter.sharedMesh == null)
+        {
+            Debug.LogError("لا يوجد Mesh مرفق بـ MeshFilter.");
+            enabled = false;
+            return;
+        }
+
+        mesh = meshFilter.mesh;
+        mesh.MarkDynamic(); // لتحسين الأداء عند تعديل النقاط بشكل متكرر
+
+        originalVertices = mesh.vertices;
+        deformedVertices = new Vector3[originalVertices.Length];
+
+        StartCoroutine(InitializeBindingWhenReady());
+    }
+
+    /// <summary>
+    /// الانتظار حتى تكون الجسيمات جاهزة ثم إجراء الربط.
+    /// </summary>
+    IEnumerator InitializeBindingWhenReady()
+    {
+        while (body.particles == null || body.particles.Count == 0)
+            yield return null;
+
+        vertexInfluences = new List<Influence>[originalVertices.Length];
+
+        for (int i = 0; i < originalVertices.Length; i++)
+        {
+            vertexInfluences[i] = new List<Influence>();
+
+            Vector3 worldVertex = cachedTransform.TransformPoint(originalVertices[i]);
+            List<(int index, float dist)> nearbyParticles = new();
+
+            for (int j = 0; j < body.particles.Count; j++)
+            {
+                float dist = Vector3.Distance(worldVertex, body.particles[j].position);
+                if (dist <= influenceRadius)
+                    nearbyParticles.Add((j, dist));
+            }
+
+            // ترتيب الجسيمات حسب المسافة الأقرب
+            nearbyParticles.Sort((a, b) => a.dist.CompareTo(b.dist));
+
+            float totalWeight = 0f;
+            int count = Mathf.Min(maxInfluencers, nearbyParticles.Count);
+
+            for (int k = 0; k < count; k++)
+            {
+                float rawWeight = 1f / (nearbyParticles[k].dist + 0.0001f);
+                totalWeight += rawWeight;
+
+                vertexInfluences[i].Add(new Influence
+                {
+                    particleIndex = nearbyParticles[k].index,
+                    weight = rawWeight
+                });
+            }
+
+            // تطبيع الأوزان لتكون مجموعها 1
+            for (int k = 0; k < vertexInfluences[i].Count; k++)
+            {
+                var inf = vertexInfluences[i][k];
+                inf.weight /= totalWeight;
+                vertexInfluences[i][k] = inf;
+            }
+        }
+
+        isInitialized = true;
+    }
+
+    /// <summary>
+    /// نقوم بتحديث نقاط الشبكة بناءً على حركة الجسيمات (بتأخير حسب FPS المطلوب)
+    /// </summary>
+    void LateUpdate()
+    {
+        if (!isInitialized) return;
+
+        timer += Time.deltaTime;
+        if (timer < updateInterval) return;
+        timer = 0f;
+
+        for (int i = 0; i < originalVertices.Length; i++)
+        {
+            var influences = vertexInfluences[i];
+            if (influences == null || influences.Count == 0)
+            {
+                deformedVertices[i] = originalVertices[i];
+                continue;
+            }
+
+            Vector3 blendedPos = Vector3.zero;
+            foreach (var inf in influences)
+            {
+                if (inf.particleIndex < body.particles.Count)
+                    blendedPos += body.particles[inf.particleIndex].position * inf.weight;
+            }
+
+            deformedVertices[i] = cachedTransform.InverseTransformPoint(blendedPos);
+        }
+
+        mesh.vertices = deformedVertices;
+
+        // إذا لاحظت تشوهات كبيرة، فكّر بتفعيل السطر التالي:
+        // mesh.RecalculateBounds();
+    }
+}

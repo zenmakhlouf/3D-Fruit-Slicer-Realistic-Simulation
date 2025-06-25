@@ -1,0 +1,12 @@
+# Blender 4.2.0 MTL File: 'Coconut - 224 tris.blend'
+# www.blender.org
+
+newmtl Material__Coco
+Ns 11.111113
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd coconut.png
