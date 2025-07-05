@@ -11,6 +11,7 @@ public class Particle
     public bool isFixed = false;
     public Body body; // Reference to owning body (added for collision handling)
     public float collisionRadius = 0.1f; // Default collision radius
+    public Color color = Color.red;
 
     public Particle(Vector3 initialPosition, float mass, bool isFixed = false)
     {

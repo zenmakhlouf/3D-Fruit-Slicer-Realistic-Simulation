@@ -3,14 +3,15 @@ using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
-/// هذا السكربت يربط الجسيمات (Particles) بنقاط شبكة الميش (Mesh)
+///كل نقطة في الميش تتحرك نتيجة حركة الجسيمات القريبة منها.
+///كل نقطة تصبح مرتبطة بعدة جسيمات قريبة مع تأثير موزون.
 /// ليقوم بتحديث شكل المجسم بشكل ناعم أثناء المحاكاة.
 /// </summary>
 [RequireComponent(typeof(MeshFilter))]
 [RequireComponent(typeof(Body))]
 public class BodyMeshRenderer2 : MonoBehaviour
 {
-    private Mesh mesh;
+    private Mesh mesh;  
     private Vector3[] originalVertices;         // النسخة الأصلية من نقاط الشبكة
     private Vector3[] deformedVertices;         // النسخة المعدّلة بناءً على الجسيمات
     private Body body;
@@ -142,6 +143,6 @@ public class BodyMeshRenderer2 : MonoBehaviour
         mesh.vertices = deformedVertices;
 
         // إذا لاحظت تشوهات كبيرة، فكّر بتفعيل السطر التالي:
-        // mesh.RecalculateBounds();
+        mesh.RecalculateBounds();
     }
 }

@@ -15,8 +15,8 @@ public class Body : MonoBehaviour
     // إعدادات الفيزياء الأساسية
     [Header("Physics Settings")]
     public Vector3 gravity = new Vector3(0, -9.81f, 0);   // قوة الجاذبية
-    public float fixedTimeStep = 0.05f;                   // خطوة الزمن الفيزيائية الثابتة (مثل FixedUpdate)
-    public int solverIterations = 10;                     // عدد مرات حل القيود في كل إطار
+    public float fixedTimeStep = 0.0167f;                   // خطوة الزمن الفيزيائية الثابتة (مثل FixedUpdate)
+    public int solverIterations = 3;                     // عدد مرات حل القيود في كل إطار
     public float groundRestitution = 0.5f;                // معامل ارتداد الجسيمات عند اصطدامها بالأرض
 
     // إعدادات التصادم الأرضي

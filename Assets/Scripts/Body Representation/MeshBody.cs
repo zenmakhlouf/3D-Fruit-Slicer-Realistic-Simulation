@@ -9,7 +9,7 @@ public class MeshBody : MonoBehaviour
     public float totalMass = 1f;
     public float stiffness = 1.0f;
     public float connectionRadius = 0.5f; 
-    public bool includeSurfaceVertices = false;
+    public bool includeSurfaceVertices = true;
     public bool includeInternalParticles = true;
 
     private Body body;
@@ -35,10 +35,9 @@ public class MeshBody : MonoBehaviour
         Bounds bounds = GetComponent<MeshFilter>().sharedMesh.bounds;
 
         float size = bounds.size.magnitude;
+        //ضرب الطول القطري في 1.5 لزيادة كثافة الجزيئات مع زيادة حجم الجسم.
         resolution = Mathf.Clamp((int)(size * 1.5f), 3, 10);
         MeshCollider meshCollider = GetComponent<MeshCollider>();
-    
-
     }
 
     void GenerateFromMesh()
@@ -47,7 +46,7 @@ public class MeshBody : MonoBehaviour
         body.constraints.Clear();
         HashSet<Vector3> added = new HashSet<Vector3>();
 
-        // 1. Surface vertices
+        // 1. Surface vertices وزيع جزيئات عند رؤوس سطح الميش (Vertices) فقط.
         if (includeSurfaceVertices)
         {
             foreach (Vector3 local in mesh.vertices)
@@ -60,7 +59,7 @@ public class MeshBody : MonoBehaviour
             }
         }
 
-        // 2. Internal particles
+        // 2. Internal particles تأكد من أن الجسيم سيتم وضعه بحسب الكثافة
         if (includeInternalParticles)
         {
             Bounds bounds = mesh.bounds;
@@ -113,7 +112,7 @@ public class MeshBody : MonoBehaviour
         HashSet<(int, int)> addedConstraints = new HashSet<(int, int)>();
         object lockObj = new object(); // For thread-safe access to shared structures
 
-        // Parallelized loop over particles
+        // Parallelized loop over particles هذا الجزء يسرّع الحسابات بفضل المعالجة المتوازية (multi-threaded)، كل جسيم p يتم معالجته بشكل مستقل.
             Parallel.ForEach(body.particles, p =>
             {
                 Vector3Int cell = GetGridCell(p.position, cellSize);
@@ -158,6 +157,7 @@ public class MeshBody : MonoBehaviour
         }
 
 
+   //يُطلق شعاع (Raycast) من نقطة على بُعد 100 وحدة إلى يسار النقطة (point - dir * 100f) باتجاه اليمين (dir) لمسافة 200 وحدة.
     bool FastPointInsideMesh(Vector3 point)
     {
         Collider col = GetComponent<Collider>();
@@ -193,10 +193,10 @@ public class MeshBody : MonoBehaviour
         if (!Application.isPlaying) return;
         if (body.particles.Count < 1000)
         {
-            Gizmos.color = Color.green;
             foreach (var p in body.particles)
             {
                 Gizmos.DrawSphere(p.position, 0.02f);
+                Gizmos.color = p.color;
             }
         }
     }
