@@ -45,7 +45,7 @@ public class SphereBody : MonoBehaviour
     {
         if (!Application.isPlaying)
         {
-            Debug.LogWarning("Can only regenerate sphere in Play Mode.");
+            // Debug.LogWarning("Can only regenerate sphere in Play Mode.");
             return;
         }
         if (body == null) body = GetComponent<Body>();
@@ -80,7 +80,7 @@ public class SphereBody : MonoBehaviour
 
         if (localParticleList.Count == 0)
         {
-            Debug.LogError($"SphereBody '{gameObject.name}' generated no particles.", this);
+            // Debug.LogError($"SphereBody '{gameObject.name}' generated no particles.", this);
             return;
         }
 
@@ -118,8 +118,8 @@ public class SphereBody : MonoBehaviour
         // Connect surface particles with springs
         ConnectSurfaceParticles();
 
-        Debug.Log($"SphereBody '{gameObject.name}': {body.particles.Count} particles " +
-                  $"(CenterIdx: {centerParticlePhysicsIndex}), {body.constraints.Count} constraints.");
+        // Debug.Log($"SphereBody '{gameObject.name}': {body.particles.Count} particles " +
+                //   $"(CenterIdx: {centerParticlePhysicsIndex}), {body.constraints.Count} constraints.");
     }
 
     void ConnectSurfaceParticles()

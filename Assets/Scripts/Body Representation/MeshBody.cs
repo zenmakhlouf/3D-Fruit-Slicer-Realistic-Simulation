@@ -153,7 +153,7 @@ public class MeshBody : MonoBehaviour
             });
 
             // Log results
-            Debug.Log($"[MeshBody] Particles: {body.particles.Count}, Constraints: {body.constraints.Count}");
+            // Debug.Log($"[MeshBody] Particles: {body.particles.Count}, Constraints: {body.constraints.Count}");
         }
 
 

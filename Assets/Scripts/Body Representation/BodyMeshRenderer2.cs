@@ -42,7 +42,7 @@ public class BodyMeshRenderer2 : MonoBehaviour
         MeshFilter meshFilter = GetComponent<MeshFilter>();
         if (meshFilter.sharedMesh == null)
         {
-            Debug.LogError("لا يوجد Mesh مرفق بـ MeshFilter.");
+            // Debug.LogError("لا يوجد Mesh مرفق بـ MeshFilter.");
             enabled = false;
             return;
         }

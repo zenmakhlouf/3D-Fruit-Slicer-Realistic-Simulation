@@ -14,11 +14,17 @@ public class Knife : MonoBehaviour
     public GameObject sparkPrefab; 
     public AudioClip cutSound;
 
+    void Start()
+{
+    InvokeRepeating(nameof(CleanupBodies), 10f, 10f);
+}
+
+
     void Update()
     {
         if (knifeCollider == null || simManager == null)
         {
-            Debug.LogWarning("KnifeCollider or SimulationManager is null!");
+            // Debug.LogWarning("KnifeCollider or SimulationManager is null!");
             return;
         }
 
@@ -73,9 +79,16 @@ public class Knife : MonoBehaviour
     {
         if (originalBody == null || originalBody.particles == null)
         {
-            Debug.LogWarning("Original body or its particles are null!");
+            // Debug.LogWarning("Original body or its particles are null!");
             return;
         }
+
+        if (originalBody.name.Contains("FruitPart"))
+        {
+            // Debug.Log("Skipping cut: already a FruitPart.");
+            return;
+        }
+
 
         // Create new body
         GameObject newObj = new GameObject("FruitPart");
@@ -159,7 +172,7 @@ public class Knife : MonoBehaviour
         // Final check: both bodies must have at least 3 particles
         if (toTransfer.Count < 3 || remaining.Count < 3)
         {
-            Debug.LogWarning($"Cannot cut: Not enough particles (New: {toTransfer.Count}, Original: {remaining.Count})");
+            // Debug.LogWarning($"Cannot cut: Not enough particles (New: {toTransfer.Count}, Original: {remaining.Count})");
             Destroy(newObj);
             return;
         }
@@ -215,9 +228,22 @@ public class Knife : MonoBehaviour
             audioSource.PlayOneShot(cutSound);
         }
 
+        ScoreManager scoreManager = FindObjectOfType<ScoreManager>();
+        if (scoreManager != null)
+        {
+            scoreManager.IncreaseScore(1);
+        }
 
-        Debug.Log($"✅ Cut successful! Transferred {toTransfer.Count} particles. New body particles: {newBody.particles.Count}, Original body particles: {originalBody.particles.Count}");
-        Debug.Log($"New body Rigidbody: isKinematic={rb.isKinematic}, useGravity={rb.useGravity}");
+    Debug.Log($"✅ Cut successful! Transferred {toTransfer.Count} particles. New body particles: {newBody.particles.Count}, Original body particles: {originalBody.particles.Count}");
+
+// إزالة المرجع أولاً
+    simManager.bodies.Remove(originalBody);
+
+    // تدمير الأجسام بعد فترة للسماح للأصوات أو التأثيرات بالانتهاء
+    Destroy(newObj, 2f);
+    Destroy(originalBody.gameObject, 2f);
+
+
     }
 
     Vector3Int GetGridCell(Vector3 position, float cellSize)
@@ -278,4 +304,24 @@ public class Knife : MonoBehaviour
             }
         }
     }
+
+    void CleanupBodies()
+{
+    for (int i = simManager.bodies.Count - 1; i >= 0; i--)
+    {
+        Body body = simManager.bodies[i];
+        if (body == null || body.gameObject == null)
+        {
+            simManager.bodies.RemoveAt(i);
+            continue;
+        }
+        // يمكنك إضافة شروط إضافية للتدمير، مثلا إذا الجسم بعيد أو غير نشط لفترة طويلة
+        if (!body.gameObject.activeInHierarchy)
+        {
+            Destroy(body.gameObject);
+            simManager.bodies.RemoveAt(i);
+        }
+    }
+}
+
 }

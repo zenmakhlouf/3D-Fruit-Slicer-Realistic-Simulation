@@ -78,7 +78,7 @@ public class CubeBody : MonoBehaviour
             AddSpring(0, 6); AddSpring(1, 7); AddSpring(2, 4); AddSpring(3, 5);
         }
 
-        Debug.Log($"CubeBody '{gameObject.name}' generated: {bodyComponent.particles.Count} particles, " +
-                  $"{bodyComponent.constraints.Count} constraints.");
+        // Debug.Log($"CubeBody '{gameObject.name}' generated: {bodyComponent.particles.Count} particles, " +
+                //   $"{bodyComponent.constraints.Count} constraints.");
     }
 }

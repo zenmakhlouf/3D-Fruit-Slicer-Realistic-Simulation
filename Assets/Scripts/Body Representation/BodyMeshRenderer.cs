@@ -39,7 +39,7 @@ public class BodyMeshRenderer : MonoBehaviour
         MeshFilter meshFilter = GetComponent<MeshFilter>();
         if (meshFilter.mesh == null)
         {
-            Debug.LogError($"BodyMeshRenderer on {gameObject.name}: MeshFilter has no mesh assigned.", this);
+            // Debug.LogError($"BodyMeshRenderer on {gameObject.name}: MeshFilter has no mesh assigned.", this);
             this.enabled = false;
             return;
         }
@@ -66,7 +66,7 @@ public class BodyMeshRenderer : MonoBehaviour
     {
         if (!Application.isPlaying)
         {
-            Debug.LogWarning("Rebind can only be triggered in Play Mode.", this);
+            // Debug.LogWarning("Rebind can only be triggered in Play Mode.", this);
             return;
         }
         isInitialized = false;

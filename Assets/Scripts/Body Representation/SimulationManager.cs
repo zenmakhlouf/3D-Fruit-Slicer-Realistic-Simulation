@@ -27,6 +27,7 @@ public class SimulationManager : MonoBehaviour
     private float launchFactor = 10.0f;        // Scaling factor for launch strength (adjustable)
     void Awake()
     {
+        
         gridCellSize = 2.1f * particleRadius;
         spatialGrid = new Dictionary<Vector3Int, List<Particle>>();
     }
