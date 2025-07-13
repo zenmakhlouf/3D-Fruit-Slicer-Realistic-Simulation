@@ -185,7 +185,7 @@ void SpawnSingleObject()
 void SpawnRandomObject()
 {
     SpawnSingleObject();
-    SpawnSingleObject(); // توليد جسم ثاني
+    // SpawnSingleObject(); // توليد جسم ثاني
 
 }
 
