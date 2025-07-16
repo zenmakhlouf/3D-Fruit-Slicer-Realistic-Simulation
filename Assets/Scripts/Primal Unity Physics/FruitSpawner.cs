@@ -1,291 +1,274 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 public class FruitSpawner : MonoBehaviour
 {
+    [Header("Prefabs")]
     public List<GameObject> fruitPrefabs;
     public List<GameObject> bombPrefabs;
+
+    [Header("Spawn Settings")]
     public float spawnInterval = 1f;
     public Vector2 spawnArea = new Vector2(3f, 3f);
     public float spawnHeight = 7f;
     public SimulationManager simManager;
-    private int consecutiveCount = 0;
-    private bool lastWasBomb = false;
-    int maxSameTypeInRow = 2;
-    bool currentTypeIsBomb = false;
-    int sameTypeCount = 0;
-    private List<GameObject> allPrefabs;
-
-    [Range(0f, 1f)]
     public float bombSpawnChance = 0.2f;
 
-    // استخدام اسم prefab كمفتاح بدل GameObject
-    private Dictionary<string, Queue<PooledObject>> pool = new Dictionary<string, Queue<PooledObject>>();
+    [Header("Batch Settings")]
+    private int fruitsPerBatch = 4;
 
-    public float cleanupInterval = 30f; // فترة التنظيف (ثواني)
-    public float maxIdleTime = 60f;     // حذف الكائنات غير المستخدمة أكثر من هذا الوقت (ثواني)
+    [Header("Pooling")]
+    public float cleanupInterval = 30f;
+    public float maxIdleTime = 60f;
 
+    [Header("Mode Objects")]
+    public GameObject hammerObject;
+    public GameObject basketObject;
 
+    private Dictionary<string, Queue<PooledObject>> pool = new();
+    private List<GameObject> allPrefabs = new();
 
-void Start()
-{
-    if (simManager == null)
+    private bool currentTypeIsBomb = false;
+    private int sameTypeCount = 0;
+    private const int maxSameTypeInRow = 2;
+
+    private Coroutine spawnRoutine;
+
+    private struct BatchState
     {
-        Debug.LogWarning("SimulationManager is not assigned!");
+        public Vector3 position;
+        public int count;
+        public bool active;
     }
 
-    PreparePool(fruitPrefabs, 10);
-    PreparePool(bombPrefabs, 5);
+    private BatchState currentBatch;
 
-    // ادمج جميع prefabs في قائمة واحدة
-    allPrefabs = new List<GameObject>();
-    allPrefabs.AddRange(fruitPrefabs);
-    allPrefabs.AddRange(bombPrefabs);
-
-    InvokeRepeating(nameof(SpawnRandomObject), 1f, spawnInterval);
-    InvokeRepeating(nameof(CleanupPool), cleanupInterval, cleanupInterval);
-}
-
-
-//============================================================================================>
-
-    void PreparePool(List<GameObject> prefabList, int countPerPrefab)
+    private void Start()
     {
-        foreach (GameObject prefab in prefabList)
+        PreparePools();
+        spawnRoutine = StartCoroutine(SpawnLoop());
+        InvokeRepeating(nameof(CleanupPool), cleanupInterval, cleanupInterval);
+        UpdateGameModeObjects();
+    }
+
+    private void UpdateGameModeObjects()
+    {
+        if (simManager == null) return;
+
+        bool isSmash = simManager.currentGameMode == GameMode.Smash;
+
+        if (hammerObject != null)
+            hammerObject.SetActive(isSmash);
+
+        if (basketObject != null)
+            basketObject.SetActive(!isSmash);
+    }
+
+
+    private void PreparePools()
+    {
+        if (simManager == null)
+            Debug.LogWarning("SimulationManager is not assigned!");
+
+        PreparePool(fruitPrefabs, 10);
+        PreparePool(bombPrefabs, 5);
+
+        allPrefabs.AddRange(fruitPrefabs);
+        allPrefabs.AddRange(bombPrefabs);
+    }
+
+    private void PreparePool(List<GameObject> prefabList, int countPerPrefab)
+    {
+        foreach (var prefab in prefabList)
         {
-            if (prefab == null)
+            if (prefab == null) continue;
+
+            if (!pool.TryGetValue(prefab.name, out var q))
             {
-                Debug.LogWarning("Prefab list contains null reference!");
-                continue;
+                q = new Queue<PooledObject>();
+                pool[prefab.name] = q;
             }
-
-            string prefabName = prefab.name;
-
-            if (!pool.ContainsKey(prefabName))
-                pool[prefabName] = new Queue<PooledObject>();
 
             for (int i = 0; i < countPerPrefab; i++)
             {
                 GameObject obj = Instantiate(prefab);
                 obj.SetActive(false);
-                pool[prefabName].Enqueue(new PooledObject(obj));
+                q.Enqueue(new PooledObject(obj));
             }
         }
     }
-    //============================================================================================>
 
-
-GameObject GetFromPool(GameObject prefab)
-{
-    if (prefab == null)
+    private IEnumerator SpawnLoop()
     {
-        Debug.LogError("GetFromPool called with null prefab!");
-        return null;
-    }
-
-    string prefabName = prefab.name;
-
-    if (!pool.ContainsKey(prefabName))
-        pool[prefabName] = new Queue<PooledObject>();
-
-    if (pool[prefabName].Count > 0)
-    {
-        PooledObject pooledObj = pool[prefabName].Dequeue();
-        pooledObj.lastUsedTime = Time.time;
-        return pooledObj.gameObject;
-    }
-    else
-    {
-        // نولد عدد عشوائي من الأجسام بين 2 و5
-        int replenishCount = Random.Range(2, 6);
-
-        for (int i = 0; i < replenishCount; i++)
+        while (true)
         {
-            GameObject obj = Instantiate(prefab);
-            obj.SetActive(false);
-            pool[prefabName].Enqueue(new PooledObject(obj));
+            SpawnRandomObject();
+            yield return new WaitForSeconds(spawnInterval);
+        }
+    }
+
+    private void SpawnRandomObject()
+    {
+        if (simManager == null || simManager.currentGameMode != GameMode.Collect)
+        {
+            SpawnSingleObject(GenerateRandomPosition());
+            return;
         }
 
-        // نرجع أول كائن تمت إضافته
-        PooledObject newPooledObj = pool[prefabName].Dequeue();
-        newPooledObj.lastUsedTime = Time.time;
-        return newPooledObj.gameObject;
+        if (!currentBatch.active || currentBatch.count >= fruitsPerBatch)
+        {
+            currentBatch.position = GenerateRandomPosition();
+            currentBatch.count = 0;
+            currentBatch.active = true;
+        }
+
+        SpawnSingleObject(currentBatch.position);
+        currentBatch.count++;
+
+        if (currentBatch.count >= fruitsPerBatch)
+            currentBatch.active = false;
     }
-}
 
-//============================================================================================>
-
-
-    void ReturnToPool(GameObject prefab, GameObject obj)
+    private Vector3 GenerateRandomPosition()
     {
+        Vector3 pos = Camera.main.transform.position + Camera.main.transform.forward * 25f;
+        pos.x += Random.Range(-spawnArea.x / 2f, spawnArea.x / 2f);
+        pos.z += Random.Range(-spawnArea.y / 2f, spawnArea.y / 2f);
+        pos.y = spawnHeight;
+        return pos;
+    }
+
+    private void SpawnSingleObject(Vector3 position)
+    {
+        bool spawnBomb = DetermineNextType();
+        List<GameObject> selectedList = spawnBomb ? bombPrefabs : fruitPrefabs;
+
+        if (selectedList.Count == 0) return;
+
+        GameObject prefabToSpawn = selectedList[Random.Range(0, selectedList.Count)];
+        GameObject obj = GetFromPool(prefabToSpawn);
         if (obj == null) return;
 
+        obj.SetActive(true);
+        obj.transform.position = position;
+
+        Body body = obj.GetComponent<Body>();
+        if (body != null)
+        {
+            simManager?.bodies.Add(body);
+            if (simManager.currentGameMode == GameMode.Collect)
+                StartCoroutine(DisableAfterTime(obj, prefabToSpawn, body, 5f));
+        }
+    }
+
+    private bool DetermineNextType()
+    {
+        float forceSwitchChance = 0.1f + sameTypeCount * 0.2f;
+        bool result = currentTypeIsBomb;
+
+        if (sameTypeCount >= maxSameTypeInRow || Random.value < forceSwitchChance)
+        {
+            result = !currentTypeIsBomb;
+            sameTypeCount = 1;
+        }
+        else
+        {
+            sameTypeCount++;
+        }
+
+        currentTypeIsBomb = result;
+        return result;
+    }
+
+    private GameObject GetFromPool(GameObject prefab)
+    {
+        if (prefab == null) return null;
+
+        string name = prefab.name;
+        if (!pool.TryGetValue(name, out var q))
+        {
+            q = new Queue<PooledObject>();
+            pool[name] = q;
+        }
+
+        if (q.Count == 0)
+        {
+            for (int i = 0; i < Random.Range(2, 6); i++)
+            {
+                GameObject obj = Instantiate(prefab);
+                obj.SetActive(false);
+                q.Enqueue(new PooledObject(obj));
+            }
+        }
+
+        PooledObject pooled = q.Dequeue();
+        pooled.lastUsedTime = Time.time;
+        return pooled.gameObject;
+    }
+
+    private void ReturnToPool(GameObject prefab, GameObject obj)
+    {
+        if (obj == null) return;
         obj.SetActive(false);
 
-        string prefabName = prefab.name;
+        string name = prefab.name;
+        if (!pool.TryGetValue(name, out var q))
+        {
+            q = new Queue<PooledObject>();
+            pool[name] = q;
+        }
 
-        if (!pool.ContainsKey(prefabName))
-            pool[prefabName] = new Queue<PooledObject>();
-
-        pool[prefabName].Enqueue(new PooledObject(obj));
+        q.Enqueue(new PooledObject(obj));
     }
 
-//============================================================================================>
-
-void SpawnSingleObject()
-{
-    float forceSwitchChance = 0.1f + sameTypeCount * 0.2f;
-
-    bool spawnBomb = currentTypeIsBomb;
-
-    if (sameTypeCount >= maxSameTypeInRow || Random.value < forceSwitchChance)
-    {
-        spawnBomb = !currentTypeIsBomb;
-        sameTypeCount = 1;
-    }
-    else
-    {
-        sameTypeCount++;
-    }
-
-    currentTypeIsBomb = spawnBomb;
-
-    List<GameObject> selectedList = spawnBomb ? bombPrefabs : fruitPrefabs;
-
-    if (selectedList == null || selectedList.Count == 0)
-        return;
-
-    int index = Random.Range(0, selectedList.Count);
-    GameObject prefabToSpawn = selectedList[index];
-
-    if (prefabToSpawn == null)
-        return;
-
-    GameObject obj = GetFromPool(prefabToSpawn);
-    if (obj == null)
-        return;
-
-    obj.SetActive(true);
-
-    Vector3 spawnPosition = Camera.main.transform.position + Camera.main.transform.forward * 20f;
-    spawnPosition.x += Random.Range(-spawnArea.x / 2f, spawnArea.x / 2f);
-    spawnPosition.z += Random.Range(-spawnArea.y / 2f, spawnArea.y / 2f);
-    spawnPosition.y = spawnHeight;
-    obj.transform.position = spawnPosition;
-
-    Body body = obj.GetComponent<Body>();
-    if (body != null)
-    {
-        simManager?.bodies.Add(body);
-        StartCoroutine(DisableAfterTime(obj, prefabToSpawn, body, 5f));
-    }
-}
-
-
-void SpawnRandomObject()
-{
-    SpawnSingleObject();
-    // SpawnSingleObject(); // توليد جسم ثاني
-
-}
-
-
-//============================================================================================>
-
-
-    System.Collections.IEnumerator DisableAfterTime(GameObject obj, GameObject prefab, Body body, float time)
+    private IEnumerator DisableAfterTime(GameObject obj, GameObject prefab, Body body, float time)
     {
         yield return new WaitForSeconds(time);
 
-        if (obj == null) yield break;
-
-        if (simManager?.bodies != null && body != null)
-        {
+        if (obj != null && body != null && simManager?.bodies != null)
             simManager.bodies.Remove(body);
-        }
 
         ReturnToPool(prefab, obj);
     }
 
-    //============================================================================================>
-
-
-   
-void CleanupPool()
-{
-    List<string> keys = new List<string>(pool.Keys);
-
-    foreach (var prefabName in keys)
+    private void CleanupPool()
     {
-        Queue<PooledObject> q = pool[prefabName];
-        int initialCount = q.Count;
-        int destroyedCount = 0;
-
-        int count = initialCount;
-        for (int i = 0; i < count; i++)
+        foreach (var key in new List<string>(pool.Keys))
         {
-            PooledObject pooledObj = q.Dequeue();
-            if (Time.time - pooledObj.lastUsedTime > maxIdleTime)
+            var q = pool[key];
+            int originalCount = q.Count;
+            int cleaned = 0;
+
+            for (int i = 0; i < originalCount; i++)
             {
-                Destroy(pooledObj.gameObject);
-                destroyedCount++;
+                var pooled = q.Dequeue();
+                if (Time.time - pooled.lastUsedTime > maxIdleTime)
+                    cleaned++;
+                else
+                    q.Enqueue(pooled);
             }
-            else
+
+            for (int i = 0; i < cleaned; i++)
             {
-                q.Enqueue(pooledObj);
-            }
-        }
-
-        // تعويض الكائنات المدمرة باستخدام prefabs عشوائية من allPrefabs
-        for (int i = 0; i < destroyedCount; i++)
-        {
-            GameObject randomPrefab = GetRandomPrefab();
-            if (randomPrefab != null)
-            {
-                GameObject obj = Instantiate(randomPrefab);
-                obj.SetActive(false);
-
-                string newPrefabName = randomPrefab.name;
-
-                if (!pool.ContainsKey(newPrefabName))
-                    pool[newPrefabName] = new Queue<PooledObject>();
-
-                pool[newPrefabName].Enqueue(new PooledObject(obj));
+                GameObject prefab = GetRandomPrefab();
+                if (prefab != null)
+                {
+                    GameObject obj = Instantiate(prefab);
+                    obj.SetActive(false);
+                    if (!pool.ContainsKey(prefab.name))
+                        pool[prefab.name] = new Queue<PooledObject>();
+                    pool[prefab.name].Enqueue(new PooledObject(obj));
+                }
             }
         }
     }
-}
 
-GameObject GetRandomPrefab()
-{
-    if (allPrefabs == null || allPrefabs.Count == 0)
-        return null;
-
-    int index = UnityEngine.Random.Range(0, allPrefabs.Count);
-    return allPrefabs[index];
-}
-
-//============================================================================================>
-
-
-// دالة مساعدة لإيجاد prefab في القوائم fruitPrefabs و bombPrefabs حسب الاسم
-GameObject FindPrefabByName(string prefabName)
-{
-    foreach (var prefab in fruitPrefabs)
+    private GameObject GetRandomPrefab()
     {
-        if (prefab != null && prefab.name == prefabName)
-            return prefab;
+        if (allPrefabs == null || allPrefabs.Count == 0) return null;
+        return allPrefabs[Random.Range(0, allPrefabs.Count)];
     }
-    foreach (var prefab in bombPrefabs)
-    {
-        if (prefab != null && prefab.name == prefabName)
-            return prefab;
-    }
-    return null;
-}
-
-//============================================================================================>
-
 
     private class PooledObject
     {

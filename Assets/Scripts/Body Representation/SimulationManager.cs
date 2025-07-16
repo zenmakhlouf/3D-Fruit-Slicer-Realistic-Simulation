@@ -1,6 +1,12 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+public enum GameMode
+{
+    Smash,   // تحطيم الفواكه
+    Collect  // جمع الفواكه بالسلة
+}
+
 public class SimulationManager : MonoBehaviour
 {
     public List<Body> bodies = new List<Body>();
@@ -25,6 +31,11 @@ public class SimulationManager : MonoBehaviour
     private bool isDragging = false;           // Flag to track dragging state
     private float selectionThreshold = 0.5f;   // Max distance for selection (adjustable)
     private float launchFactor = 10.0f;        // Scaling factor for launch strength (adjustable)
+    public MeshCollider basketCollider;
+
+    public GameMode currentGameMode = GameMode.Collect;
+
+
     void Awake()
     {
         
@@ -34,6 +45,18 @@ public class SimulationManager : MonoBehaviour
 
     void Update()
     {
+
+    if (Input.GetKeyDown(KeyCode.M))
+    {
+        if (currentGameMode == GameMode.Smash)
+            currentGameMode = GameMode.Collect;
+        else
+            currentGameMode = GameMode.Smash;
+
+        Debug.Log("الوضع الحالي: " + currentGameMode);
+    }
+
+
         timeAccumulator += Time.deltaTime;
         while (timeAccumulator >= fixedTimeStep)
         {
@@ -205,21 +228,6 @@ public class SimulationManager : MonoBehaviour
         if (!p2.isFixed)
             p2.position += totalCorrection * (invMass2 / totalInverseMass);
 
-        // Optional restitution (uncomment to enable)
-        /*
-        Vector3 vel1 = (p1.position - p1.prevPosition) / deltaTime;
-        Vector3 vel2 = (p2.position - p2.prevPosition) / deltaTime;
-        Vector3 relativeVel = millimetresvel1 - vel2;
-        float normalVel = Vector3.Dot(relativeVel, correctionNormal);
-        if (normalVel < 0)
-        {
-            float restitution = 0.5f;
-            float reflectedVel = -normalVel * restitution;
-            Vector3 velCorrection = correctionNormal * (reflectedVel - normalVel);
-            if (!p1.isFixed) p1.prevPosition -= velCorrection * invMass1 / totalInverseMass * deltaTime;
-            if (!p2.isFixed) p2.prevPosition += velCorrection * invMass2 / totalInverseMass * deltaTime;
-        }
-        */
     }
     private Body GetSelectedBody(Ray ray, float threshold)
     {
@@ -241,4 +249,7 @@ public class SimulationManager : MonoBehaviour
         }
         return closestBody;
     }
+
+  
+
 }
