@@ -31,7 +31,6 @@ public class SimulationManager : MonoBehaviour
     private bool isDragging = false;           // Flag to track dragging state
     private float selectionThreshold = 0.5f;   // Max distance for selection (adjustable)
     private float launchFactor = 10.0f;        // Scaling factor for launch strength (adjustable)
-    public MeshCollider basketCollider;
 
     public GameMode currentGameMode = GameMode.Collect;
 
