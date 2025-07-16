@@ -34,6 +34,18 @@ public class SimulationManager : MonoBehaviour
 
     public GameMode currentGameMode = GameMode.Collect;
 
+    void Start()
+    {
+        string mode = PlayerPrefs.GetString("GameMode", "Collect");
+
+        if (mode == "Smash")
+            currentGameMode = GameMode.Smash;
+        else
+            currentGameMode = GameMode.Collect;
+
+        Debug.Log("🚀 بدأنا اللعبة في وضع: " + currentGameMode);
+    }
+
 
     void Awake()
     {
@@ -44,17 +56,6 @@ public class SimulationManager : MonoBehaviour
 
     void Update()
     {
-
-    if (Input.GetKeyDown(KeyCode.M))
-    {
-        if (currentGameMode == GameMode.Smash)
-            currentGameMode = GameMode.Collect;
-        else
-            currentGameMode = GameMode.Smash;
-
-        Debug.Log("الوضع الحالي: " + currentGameMode);
-    }
-
 
         timeAccumulator += Time.deltaTime;
         while (timeAccumulator >= fixedTimeStep)

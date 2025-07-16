@@ -4,7 +4,7 @@ public class KnifeController : MonoBehaviour
 {
     public Camera mainCamera;
     public float knifeDepth = 0f; // Start a few units in front of camera
-    public float scrollSpeed = 10f;
+    public float scrollSpeed = 25f;
     public float minDepth = 0.5f; // Closest to camera
     public float maxDepth = 100f; // Furthest away
 

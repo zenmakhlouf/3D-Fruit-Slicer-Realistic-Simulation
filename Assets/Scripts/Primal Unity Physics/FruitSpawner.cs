@@ -9,9 +9,9 @@ public class FruitSpawner : MonoBehaviour
     public List<GameObject> bombPrefabs;
 
     [Header("Spawn Settings")]
-    public float spawnInterval = 1f;
+    [HideInInspector] public float spawnInterval = 2f;
     public Vector2 spawnArea = new Vector2(3f, 3f);
-    public float spawnHeight = 7f;
+    public float spawnHeight = 20f;
     public SimulationManager simManager;
     public float bombSpawnChance = 0.2f;
 
@@ -63,6 +63,8 @@ public class FruitSpawner : MonoBehaviour
 
         if (basketObject != null)
             basketObject.SetActive(!isSmash);
+
+        spawnInterval = isSmash ? 4f : 2f;            
     }
 
 
