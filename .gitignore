@@ -26,3 +26,11 @@ MemoryCaptures/
 # OS files
 .DS_Store
 Thumbs.db
+UserSettings/EditorUserSettings.asset
+UserSettings/EditorUserSettings.asset
+ProjectSettings/QualitySettings.asset
+ProjectSettings/GraphicsSettings.asset
+Assets/Scenes/Menu.unity
+Assets/Scenes/Menu.unity.meta
+ProjectSettings/GraphicsSettings.asset
+ProjectSettings/GraphicsSettings.asset
