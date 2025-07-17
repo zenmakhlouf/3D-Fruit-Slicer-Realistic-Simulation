@@ -25,6 +25,9 @@ public class SphereBody : MonoBehaviour
     [Range(1.1f, 3.0f)]
     public float connectionRadiusMultiplier = 2.0f; // Multiplier for spring connection distance
 
+    [Header("Ellipsoid Support")]
+    public Vector3 ellipsoidScale = Vector3.one; // (1,1,1) = sphere, (a,b,c) = ellipsoid
+
     private Body body;
     public int centerParticlePhysicsIndex = -1; // Index of the center particle, if added
 
@@ -119,7 +122,7 @@ public class SphereBody : MonoBehaviour
         ConnectSurfaceParticles();
 
         // Debug.Log($"SphereBody '{gameObject.name}': {body.particles.Count} particles " +
-                //   $"(CenterIdx: {centerParticlePhysicsIndex}), {body.constraints.Count} constraints.");
+        //   $"(CenterIdx: {centerParticlePhysicsIndex}), {body.constraints.Count} constraints.");
     }
 
     void ConnectSurfaceParticles()
@@ -162,9 +165,11 @@ public class SphereBody : MonoBehaviour
                 for (int k = -resolution; k <= resolution; k++)
                 {
                     Vector3 offset = new Vector3(i, j, k) * step;
-                    if (offset.magnitude <= radius * 1.05f) // Slightly larger to ensure full coverage
+                    // Apply ellipsoid scaling
+                    Vector3 scaledOffset = new Vector3(offset.x * ellipsoidScale.x, offset.y * ellipsoidScale.y, offset.z * ellipsoidScale.z);
+                    if (scaledOffset.magnitude <= radius * 1.05f) // Slightly larger to ensure full coverage
                     {
-                        Vector3 worldPos = transform.TransformPoint(offset);
+                        Vector3 worldPos = transform.TransformPoint(scaledOffset);
                         Particle p = new Particle(worldPos, 1f);
                         p.body = this.GetComponent<Body>();         // Set body reference
                         p.collisionRadius = radius / resolution;    // Set collision radius
@@ -190,7 +195,9 @@ public class SphereBody : MonoBehaviour
                 Mathf.Cos(theta) * rAtY,
                 y,
                 Mathf.Sin(theta) * rAtY) * radius;
-            Vector3 worldPos = transform.TransformPoint(localPos);
+            // Apply ellipsoid scaling
+            Vector3 scaledLocalPos = new Vector3(localPos.x * ellipsoidScale.x, localPos.y * ellipsoidScale.y, localPos.z * ellipsoidScale.z);
+            Vector3 worldPos = transform.TransformPoint(scaledLocalPos);
             Particle p = new Particle(worldPos, 1f);
             p.body = this.GetComponent<Body>();         // Set body reference
             p.collisionRadius = radius / resolution;    // Set collision radius

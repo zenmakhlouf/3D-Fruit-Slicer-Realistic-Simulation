@@ -33,18 +33,19 @@ public class DistanceConstraint
         Vector3 correctionNormal = delta / currentDistance; // Direction of correction
         Vector3 totalCorrection = correctionNormal * error * stiffness;
 
-        float invMass1 = p1.isFixed ? 0f : 1f / p1.mass;
-        float invMass2 = p2.isFixed ? 0f : 1f / p2.mass;
+        // Use cached inverse mass for better performance
+        float invMass1 = p1.InvMass;
+        float invMass2 = p2.InvMass;
         float totalInverseMass = invMass1 + invMass2;
 
         if (totalInverseMass == 0f) return; // Both particles are fixed or have infinite mass
 
         // Distribute correction based on inverse mass
-        if (!p1.isFixed)
+        if (invMass1 > 0f)
         {
             p1.position += totalCorrection * (invMass1 / totalInverseMass);
         }
-        if (!p2.isFixed)
+        if (invMass2 > 0f)
         {
             p2.position -= totalCorrection * (invMass2 / totalInverseMass);
         }

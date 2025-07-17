@@ -1,52 +1,54 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 
-[RequireComponent(typeof(Body), typeof(MeshFilter), typeof(MeshCollider))]
+[RequireComponent(typeof(Body), typeof(MeshFilter))]
 public class MeshBody : MonoBehaviour
 {
-    public int resolution = 5;
+    [Header("Mesh Particle Generation")]
+    public int resolution = 5; // Controls density of internal particles
     public float totalMass = 1f;
     public float stiffness = 1.0f;
-    public float connectionRadius = 0.5f; 
+    public float connectionRadius = 0.5f;
     public bool includeSurfaceVertices = true;
     public bool includeInternalParticles = true;
+    public float internalDensity = 0.7f; // Probability for internal particle placement
 
     private Body body;
     private Mesh mesh;
 
-    private static readonly Vector3Int[] neighborOffsets = {
-        new Vector3Int(-1, -1, -1), new Vector3Int(-1, -1, 0), new Vector3Int(-1, -1, 1),
-        new Vector3Int(-1, 0, -1),  new Vector3Int(-1, 0, 0),  new Vector3Int(-1, 0, 1),
-        new Vector3Int(-1, 1, -1),  new Vector3Int(-1, 1, 0),  new Vector3Int(-1, 1, 1),
-        new Vector3Int(0, -1, -1),  new Vector3Int(0, -1, 0),  new Vector3Int(0, -1, 1),
-        new Vector3Int(0, 0, -1),   new Vector3Int(0, 0, 0),   new Vector3Int(0, 0, 1),
-        new Vector3Int(0, 1, -1),   new Vector3Int(0, 1, 0),   new Vector3Int(0, 1, 1),
-        new Vector3Int(1, -1, -1),  new Vector3Int(1, -1, 0),  new Vector3Int(1, -1, 1),
-        new Vector3Int(1, 0, -1),   new Vector3Int(1, 0, 0),   new Vector3Int(1, 0, 1),
-        new Vector3Int(1, 1, -1),   new Vector3Int(1, 1, 0),   new Vector3Int(1, 1, 1)
-    };
-
     void Start()
     {
         body = GetComponent<Body>();
-        mesh = GetComponent<MeshFilter>().sharedMesh;
+        var meshFilter = GetComponent<MeshFilter>();
+        if (meshFilter == null)
+        {
+            Debug.LogError($"{name}: MeshFilter is missing! MeshBody requires a MeshFilter component.");
+            enabled = false;
+            return;
+        }
+        mesh = meshFilter.sharedMesh;
+        if (mesh == null)
+        {
+            Debug.LogError($"{name}: MeshFilter has no mesh assigned! Please assign a mesh.");
+            enabled = false;
+            return;
+        }
         GenerateFromMesh();
-        Bounds bounds = GetComponent<MeshFilter>().sharedMesh.bounds;
-
-        float size = bounds.size.magnitude;
-        //ضرب الطول القطري في 1.5 لزيادة كثافة الجزيئات مع زيادة حجم الجسم.
-        resolution = Mathf.Clamp((int)(size * 1.5f), 3, 10);
-        MeshCollider meshCollider = GetComponent<MeshCollider>();
     }
 
-    void GenerateFromMesh()
+    public void GenerateFromMesh()
     {
+        if (mesh == null)
+        {
+            Debug.LogError($"{name}: Mesh is null in GenerateFromMesh!");
+            return;
+        }
+
         body.particles.Clear();
         body.constraints.Clear();
         HashSet<Vector3> added = new HashSet<Vector3>();
 
-        // 1. Surface vertices وزيع جزيئات عند رؤوس سطح الميش (Vertices) فقط.
+        // 1. Surface vertices
         if (includeSurfaceVertices)
         {
             foreach (Vector3 local in mesh.vertices)
@@ -59,14 +61,13 @@ public class MeshBody : MonoBehaviour
             }
         }
 
-        // 2. Internal particles تأكد من أن الجسيم سيتم وضعه بحسب الكثافة
+        // 2. Internal particles (grid sampling inside mesh bounds)
         if (includeInternalParticles)
         {
             Bounds bounds = mesh.bounds;
             Vector3 min = bounds.min;
             Vector3 size = bounds.size;
-            float density = 0.7f;   
-            float step = Mathf.Min(size.x, size.y, size.z) / resolution;
+            float step = Mathf.Min(size.x, size.y, size.z) / Mathf.Max(2, resolution);
 
             for (float x = min.x; x <= min.x + size.x; x += step)
             {
@@ -76,9 +77,10 @@ public class MeshBody : MonoBehaviour
                     {
                         Vector3 localPoint = new Vector3(x, y, z);
                         Vector3 worldPoint = transform.TransformPoint(localPoint);
-                        if (Random.value < density && (IsNearMeshSurface(worldPoint, step * 0.5f) || FastPointInsideMesh(worldPoint)))
+                        if (Random.value < internalDensity && IsPointInsideMesh(localPoint, mesh))
                         {
-                            body.particles.Add(new Particle(worldPoint, 1f) { body = body });
+                            if (added.Add(worldPoint))
+                                body.particles.Add(new Particle(worldPoint, 1f) { body = body });
                         }
                     }
                 }
@@ -90,114 +92,76 @@ public class MeshBody : MonoBehaviour
         foreach (var p in body.particles)
             p.mass = massPer;
 
-        // 4. Create constraints using spatial grid
-        float cellSize = connectionRadius;
-        Dictionary<Vector3Int, List<Particle>> grid = new Dictionary<Vector3Int, List<Particle>>();
+        // 4. Create constraints using spatial proximity
+        CreateConstraints();
 
-        // Insert particles into grid
-        grid.Clear();
-        foreach (var p in body.particles)
-        {
-            Vector3Int cell = GetGridCell(p.position, cellSize);
-            if (!grid.TryGetValue(cell, out var cellList))
-            {
-                cellList = new List<Particle>(10);
-                grid[cell] = cellList;
-            }
-            cellList.Add(p);
-        }
+        Debug.Log($"{name}: MeshBody generated {body.particles.Count} particles and {body.constraints.Count} constraints.");
+    }
 
-    
-       // Keep track of added constraint pairs to avoid duplicates
-        HashSet<(int, int)> addedConstraints = new HashSet<(int, int)>();
-        object lockObj = new object(); // For thread-safe access to shared structures
-
-        // Parallelized loop over particles هذا الجزء يسرّع الحسابات بفضل المعالجة المتوازية (multi-threaded)، كل جسيم p يتم معالجته بشكل مستقل.
-            Parallel.ForEach(body.particles, p =>
-            {
-                Vector3Int cell = GetGridCell(p.position, cellSize);
-                int maxLinks = Mathf.Clamp(6, 3, 10);
-                int count = 0;
-
-                foreach (var offset in neighborOffsets)
-                {
-                    Vector3Int neighborCell = cell + offset;
-                    if (!grid.TryGetValue(neighborCell, out var neighbors)) continue;
-
-                    foreach (var neighbor in neighbors)
-                    {
-                        if (p == neighbor) continue;
-
-                        float dist = Vector3.SqrMagnitude(p.position - neighbor.position);
-                        if (dist <= connectionRadius * connectionRadius)
-                        {
-                            int id1 = p.GetHashCode();
-                            int id2 = neighbor.GetHashCode();
-                            if (id1 > id2) (id1, id2) = (id2, id1); // Ensure consistent ordering
-
-                            // Lock to avoid race conditions
-                            lock (lockObj)
-                            {
-                                if (addedConstraints.Add((id1, id2)))
-                                {
-                                    body.constraints.Add(new DistanceConstraint(p, neighbor, stiffness));
-                                    count++;
-                                    if (count >= maxLinks) break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (count >= maxLinks) break;
-                }
-            });
-
-            // Log results
-            // Debug.Log($"[MeshBody] Particles: {body.particles.Count}, Constraints: {body.constraints.Count}");
-        }
-
-
-   //يُطلق شعاع (Raycast) من نقطة على بُعد 100 وحدة إلى يسار النقطة (point - dir * 100f) باتجاه اليمين (dir) لمسافة 200 وحدة.
-    bool FastPointInsideMesh(Vector3 point)
+    // Simple point-in-mesh test using raycast (works for closed meshes)
+    bool IsPointInsideMesh(Vector3 localPoint, Mesh mesh)
     {
-        Collider col = GetComponent<Collider>();
+        // Cast a ray in an arbitrary direction and count intersections
+        int hitCount = 0;
         Vector3 dir = Vector3.right;
-        if (Physics.Raycast(point - dir * 100f, dir, out var hit, 200f))
+        Vector3 origin = localPoint + dir * 0.001f; // Offset to avoid edge cases
+        Ray ray = new Ray(origin, dir);
+        var triangles = mesh.triangles;
+        var vertices = mesh.vertices;
+        for (int i = 0; i < triangles.Length; i += 3)
         {
-            return hit.collider == col;
+            Vector3 v0 = vertices[triangles[i]];
+            Vector3 v1 = vertices[triangles[i + 1]];
+            Vector3 v2 = vertices[triangles[i + 2]];
+            if (RayIntersectsTriangle(ray, v0, v1, v2, out float _))
+                hitCount++;
         }
-        return false;
+        return (hitCount % 2) == 1;
     }
 
-
-    bool IsNearMeshSurface(Vector3 point, float threshold)
+    // Möller–Trumbore ray-triangle intersection
+    bool RayIntersectsTriangle(Ray ray, Vector3 v0, Vector3 v1, Vector3 v2, out float t)
     {
-        MeshCollider meshCollider = GetComponent<MeshCollider>();
-        if (meshCollider == null) return false;
-
-        Vector3 closest = meshCollider.ClosestPoint(point);
-        return Vector3.Distance(point, closest) <= threshold;
+        t = 0f;
+        Vector3 edge1 = v1 - v0;
+        Vector3 edge2 = v2 - v0;
+        Vector3 h = Vector3.Cross(ray.direction, edge2);
+        float a = Vector3.Dot(edge1, h);
+        if (Mathf.Abs(a) < 1e-6f) return false;
+        float f = 1.0f / a;
+        Vector3 s = ray.origin - v0;
+        float u = f * Vector3.Dot(s, h);
+        if (u < 0.0f || u > 1.0f) return false;
+        Vector3 q = Vector3.Cross(s, edge1);
+        float v = f * Vector3.Dot(ray.direction, q);
+        if (v < 0.0f || u + v > 1.0f) return false;
+        t = f * Vector3.Dot(edge2, q);
+        return t > 1e-6f;
     }
 
-    Vector3Int GetGridCell(Vector3 position, float cellSize)
+    void CreateConstraints()
     {
-        return new Vector3Int(
-            Mathf.FloorToInt(position.x / cellSize),
-            Mathf.FloorToInt(position.y / cellSize),
-            Mathf.FloorToInt(position.z / cellSize)
-        );
-    }
-
-    void OnDrawGizmos()
-    {
-        if (!Application.isPlaying) return;
-        if (body.particles.Count < 1000)
+        // Connect each particle to nearby particles within connectionRadius
+        int count = body.particles.Count;
+        for (int i = 0; i < count; i++)
         {
-            foreach (var p in body.particles)
+            Particle p1 = body.particles[i];
+            for (int j = i + 1; j < count; j++)
             {
-                Gizmos.DrawSphere(p.position, 0.02f);
-                Gizmos.color = p.color;
+                Particle p2 = body.particles[j];
+                float dist = Vector3.Distance(p1.position, p2.position);
+                if (dist < connectionRadius)
+                {
+                    body.constraints.Add(new DistanceConstraint(p1, p2, stiffness));
+                }
             }
         }
+    }
+
+    // Optional: Regenerate mesh body at runtime
+    [ContextMenu("Regenerate Mesh Body")]
+    public void RegenerateMeshBody()
+    {
+        GenerateFromMesh();
     }
 }
