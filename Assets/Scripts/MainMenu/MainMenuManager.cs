@@ -19,6 +19,6 @@ public class MainMenuManager : MonoBehaviour
 
         public void ReturnToMainMenu()
     {
-        SceneManager.LoadScene("MainMenu"); 
+        SceneManager.LoadScene("MainMenu"); // تأكد أن اسم المشهد مطابق في Build Settings
     }
 }

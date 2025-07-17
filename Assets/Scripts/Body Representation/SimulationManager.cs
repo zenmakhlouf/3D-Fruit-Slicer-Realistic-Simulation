@@ -3,6 +3,7 @@ using System.Collections.Generic;
 
 public enum GameMode
 {
+    None = 0,
     Smash,   // تحطيم الفواكه
     Collect  // جمع الفواكه بالسلة
 }
@@ -32,19 +33,7 @@ public class SimulationManager : MonoBehaviour
     private float selectionThreshold = 0.5f;   // Max distance for selection (adjustable)
     private float launchFactor = 10.0f;        // Scaling factor for launch strength (adjustable)
 
-    public GameMode currentGameMode = GameMode.Collect;
-
-    void Start()
-    {
-        string mode = PlayerPrefs.GetString("GameMode", "Collect");
-
-        if (mode == "Smash")
-            currentGameMode = GameMode.Smash;
-        else
-            currentGameMode = GameMode.Collect;
-
-        Debug.Log("🚀 بدأنا اللعبة في وضع: " + currentGameMode);
-    }
+    public GameMode currentGameMode = GameMode.None;
 
 
     void Awake()
@@ -53,6 +42,26 @@ public class SimulationManager : MonoBehaviour
         gridCellSize = 2.1f * particleRadius;
         spatialGrid = new Dictionary<Vector3Int, List<Particle>>();
     }
+    
+    void Start()
+    {
+        if (PlayerPrefs.HasKey("GameMode"))
+        {
+            string mode = PlayerPrefs.GetString("GameMode");
+
+            if (mode == "Smash")
+                currentGameMode = GameMode.Smash;
+            else if (mode == "Collect")
+                currentGameMode = GameMode.Collect;
+        }
+        else
+        {
+            currentGameMode = GameMode.None;
+        }
+
+        Debug.Log("🚀 بدأنا اللعبة في وضع: " + currentGameMode);
+    }
+
 
     void Update()
     {

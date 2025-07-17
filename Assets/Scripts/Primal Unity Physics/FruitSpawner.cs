@@ -47,14 +47,41 @@ public class FruitSpawner : MonoBehaviour
     private void Start()
     {
         PreparePools();
-        spawnRoutine = StartCoroutine(SpawnLoop());
         InvokeRepeating(nameof(CleanupPool), cleanupInterval, cleanupInterval);
         UpdateGameModeObjects();
     }
 
+    private bool spawnStarted = false;
+
+private void Update()
+{
+    if (!spawnStarted && simManager != null && simManager.currentGameMode != GameMode.None)
+    {
+        spawnStarted = true;
+        spawnInterval = 2f; // أو القيمة المناسبة
+        spawnRoutine = StartCoroutine(SpawnLoop());
+        UpdateGameModeObjects();
+    }
+}
+
+
+
     private void UpdateGameModeObjects()
     {
         if (simManager == null) return;
+
+        if (simManager.currentGameMode == GameMode.None)
+        {
+            // لا تظهر أي أدوات ولا تفعل شيء
+            if (hammerObject != null)
+                hammerObject.SetActive(false);
+
+            if (basketObject != null)
+                basketObject.SetActive(false);
+
+            spawnInterval = 0f; 
+            return;
+        }
 
         bool isSmash = simManager.currentGameMode == GameMode.Smash;
 
@@ -64,7 +91,7 @@ public class FruitSpawner : MonoBehaviour
         if (basketObject != null)
             basketObject.SetActive(!isSmash);
 
-        spawnInterval = isSmash ? 4f : 2f;            
+        spawnInterval = isSmash ? 4f : 2f;
     }
 
 
@@ -159,8 +186,7 @@ public class FruitSpawner : MonoBehaviour
         if (body != null)
         {
             simManager?.bodies.Add(body);
-            if (simManager.currentGameMode == GameMode.Collect)
-                StartCoroutine(DisableAfterTime(obj, prefabToSpawn, body, 5f));
+            StartCoroutine(DisableAfterTime(obj, prefabToSpawn, body, 5f));
         }
     }
 
