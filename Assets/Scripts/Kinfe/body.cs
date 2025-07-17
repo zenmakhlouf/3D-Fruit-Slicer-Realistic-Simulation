@@ -24,7 +24,6 @@ public class Knife : MonoBehaviour
     {
         if (knifeCollider == null || simManager == null)
         {
-            // Debug.LogWarning("KnifeCollider or SimulationManager is null!");
             return;
         }
 
@@ -172,7 +171,6 @@ public class Knife : MonoBehaviour
         // Final check: both bodies must have at least 3 particles
         if (toTransfer.Count < 3 || remaining.Count < 3)
         {
-            // Debug.LogWarning($"Cannot cut: Not enough particles (New: {toTransfer.Count}, Original: {remaining.Count})");
             Destroy(newObj);
             return;
         }
@@ -236,7 +234,7 @@ public class Knife : MonoBehaviour
 
     Debug.Log($"✅ Cut successful! Transferred {toTransfer.Count} particles. New body particles: {newBody.particles.Count}, Original body particles: {originalBody.particles.Count}");
 
-// إزالة المرجع أولاً
+    // إزالة المرجع أولاً
     simManager.bodies.Remove(originalBody);
 
     // تدمير الأجسام بعد فترة للسماح للأصوات أو التأثيرات بالانتهاء
