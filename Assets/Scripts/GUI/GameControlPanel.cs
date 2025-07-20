@@ -1,8 +1,8 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class GameControlPanel : MonoBehaviour
 {
-    private Body[] allBodies;
     private MeshBody[] allMeshBodies;
     private BodyMeshRenderer2[] allMeshRenderers;
 
@@ -24,41 +24,15 @@ public class GameControlPanel : MonoBehaviour
     private int maxInfluencers = 2;
     private float updateInterval = 0.01f;
 
-    void Start()
-    {
-        allBodies = FindObjectsOfType<Body>();
-        allMeshBodies = FindObjectsOfType<MeshBody>();
-        allMeshRenderers = FindObjectsOfType<BodyMeshRenderer2>();
+    public SimulationManager simManager;
 
-        if (allBodies.Length > 0)
-        {
-            gravity = allBodies[0].gravity;
-            restitution = allBodies[0].groundRestitution;
-            iterations = allBodies[0].solverIterations;
-        }
-
-        if (allMeshBodies.Length > 0)
-        {
-            var m = allMeshBodies[0];
-            resolution = m.resolution;
-            totalMass = m.totalMass;
-            stiffness = m.stiffness;
-            connectionRadius = m.connectionRadius;
-            includeSurface = m.includeSurfaceVertices;
-            includeInternal = m.includeInternalParticles;
-        }
-
-        if (allMeshRenderers.Length > 0)
-        {
-            var r = allMeshRenderers[0];
-            influenceRadius = r.influenceRadius;
-            maxInfluencers = r.maxInfluencers;
-            updateInterval = r.updateInterval;
-        }
-    }
 
     void OnGUI()
     {
+
+        if (SceneManager.GetActiveScene().name != "testParticles")
+            return;
+            
         GUI.Box(new Rect(10, 10, 280, 700), "Body & Mesh Settings");
 
         int y = 40;
@@ -113,31 +87,54 @@ public class GameControlPanel : MonoBehaviour
         updateInterval = GUI.HorizontalSlider(new Rect(20, y + 20, 200, 20), updateInterval, 0.001f, 0.1f);
         y += 50;
 
-        if (GUI.Button(new Rect(70, y, 120, 30), "Apply on All"))
+
+        
+
+if (GUI.Button(new Rect(70, y, 120, 30), "Apply on All"))
+{
+    if (simManager == null)
+    {
+        Debug.LogWarning("SimulationManager not assigned!");
+        return;
+    }
+
+    foreach (var body in simManager.bodies)
+    {
+        if (body == null) continue;
+
+        // Body properties
+        body.gravity = gravity;
+        body.groundRestitution = restitution;
+        body.solverIterations = iterations;
+
+        body.ApplySettings();
+
+        // MeshBody properties
+        var meshBody = body.GetComponent<MeshBody>();
+        if (meshBody != null)
         {
-            foreach (var body in allBodies)
-            {
-                body.gravity = gravity;
-                body.groundRestitution = restitution;
-                body.solverIterations = iterations;
-            }
-
-            foreach (var mesh in allMeshBodies)
-            {
-                mesh.resolution = resolution;
-                mesh.totalMass = totalMass;
-                mesh.stiffness = stiffness;
-                mesh.connectionRadius = connectionRadius;
-                mesh.includeSurfaceVertices = includeSurface;
-                mesh.includeInternalParticles = includeInternal;
-            }
-
-            foreach (var rend in allMeshRenderers)
-            {
-                rend.influenceRadius = influenceRadius;
-                rend.maxInfluencers = maxInfluencers;
-                rend.updateInterval = updateInterval;
-            }
+            meshBody.resolution = resolution;
+            meshBody.totalMass = totalMass;
+            meshBody.stiffness = stiffness;
+            meshBody.connectionRadius = connectionRadius;
+            meshBody.includeSurfaceVertices = includeSurface;
+            meshBody.includeInternalParticles = includeInternal;
         }
+
+        // BodyMeshRenderer2 properties
+        var renderer = body.GetComponent<BodyMeshRenderer2>();
+        if (renderer != null)
+        {
+            renderer.influenceRadius = influenceRadius;
+            renderer.maxInfluencers = maxInfluencers;
+            renderer.updateInterval = updateInterval;
+        }
+
+         Debug.Log($"Applying to body: {body.name}");
+    }
+
+    Debug.Log("Applied settings on all bodies.");
+}
+
     }
 }

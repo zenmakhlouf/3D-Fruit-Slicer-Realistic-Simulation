@@ -6,7 +6,8 @@ public class BasketCollector : MonoBehaviour
     public float detectionRadius = 1.5f;
     public float collectionInterval = 0.1f;
     public MeshCollider basketCollider;
-
+    public AudioClip collectSound;
+    private AudioSource audioSource;
     private readonly HashSet<Body> collectedBodies = new();
 
     private void Start()
@@ -19,6 +20,12 @@ public class BasketCollector : MonoBehaviour
             Debug.LogWarning("❌ BasketCollector: basketCollider is not assigned!");
             enabled = false;
             return;
+        }
+
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null)
+        {
+            Debug.LogWarning("❌ BasketCollector: No AudioSource found!");
         }
 
         InvokeRepeating(nameof(CheckBasketCollisions), 0f, collectionInterval);
@@ -51,6 +58,8 @@ public class BasketCollector : MonoBehaviour
                     collectedBodies.Add(body);
                     ScoreManager.Instance?.IncreaseScore(1);
                     Debug.Log($"✅ جمعنا: {body.name}");
+                    if (audioSource != null && collectSound != null)
+                        audioSource.PlayOneShot(collectSound);
                     break; // نخرج من الجسيمات بعد أول تصادم
                 }
             }

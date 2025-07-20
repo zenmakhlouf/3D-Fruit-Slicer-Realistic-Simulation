@@ -115,4 +115,33 @@ public class Body : MonoBehaviour
                 Gizmos.DrawLine(c.p1.position, c.p2.position);
         }
     }
+
+
+    public void ApplySettings()
+{
+    // يمكنك إعادة ضبط الزمن المجمّع لضمان بداية نظيفة
+    timeAccumulator = 0f;
+
+    // إعادة تعيين مواقع وسرعات الجسيمات إذا لزم (مثال)
+    foreach (var particle in particles)
+    {
+        if (particle == null) continue;
+
+        // مثلاً، إعادة الجاذبية ستؤثر مباشرة في `Integrate`
+        // ولكن يمكن أيضاً إعادة ضبط المواقع لتجنب القفزات المفاجئة
+        // أو إعادة تعيين السرعة غير الصريحة في Verlet عبر المواقع السابقة
+        particle.prevPosition = particle.position;
+    }
+
+    // إعادة حل القيود مرة لتأكيد الضبط الجديد
+    for (int i = 0; i < solverIterations; i++)
+    {
+        foreach (var constraint in constraints)
+        {
+            constraint?.Solve();
+        }
+    }
+
+    Debug.Log($"[Body] Settings reapplied on {name}.");
+}
 }

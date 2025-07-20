@@ -3,9 +3,9 @@ using System.Collections.Generic;
 
 public enum GameMode
 {
+    None = 0,
     Smash,   // تحطيم الفواكه
-    Collect, // جمع الفواكه بالسلة
-    None
+    Collect  // جمع الفواكه بالسلة
 }
 
 public class SimulationManager : MonoBehaviour
@@ -16,71 +16,56 @@ public class SimulationManager : MonoBehaviour
     public float particleRadius = 0.1f;
     private float timeAccumulator = 0f;
 
-    // Performance optimization settings
-    [Header("Performance Settings")]
-    public int maxParticlesForFullSimulation = 10000;
-    public bool adaptiveSolverIterations = true;
-    public float collisionDetectionRadius = 2.0f;
-    public bool enableSpatialOptimization = true;
-
-    // Spatial grid optimization
     private float gridCellSize;
     private Dictionary<Vector3Int, List<Particle>> spatialGrid;
-    private List<Vector3Int> neighborCells = new List<Vector3Int>(27); // Pre-allocated
-    private readonly Vector3Int[] neighborOffsets = new Vector3Int[27]; // Pre-calculated offsets
-
-    // Object pooling for collision detection
     private struct CollisionPair
     {
         public Particle p1;
         public Particle p2;
-        public float minDistanceSqr; // Using squared distance for performance
+        public float minDistance;
     }
     private List<CollisionPair> collisionPairs = new List<CollisionPair>();
-    private HashSet<ulong> checkedPairs = new HashSet<ulong>(); // Using ulong for faster hashing
-
-    // Pre-allocated collections to avoid GC
-    private List<Particle> tempParticleList = new List<Particle>();
-    private List<Vector3Int> tempCellList = new List<Vector3Int>();
-
     // Fields for dragging and launching
-    private Body selectedBody = null;
-    private Plane dragPlane;
-    private Vector3 initialMouseWorldPos;
-    private bool isDragging = false;
-    private float selectionThreshold = 0.5f;
-    private float launchFactor = 10.0f;
+    private Body selectedBody = null;          // The currently selected body
+    private Plane dragPlane;                   // Plane for drag calculation
+    private Vector3 initialMouseWorldPos;      // Initial mouse position in world space
+    private bool isDragging = false;           // Flag to track dragging state
+    private float selectionThreshold = 0.5f;   // Max distance for selection (adjustable)
+    private float launchFactor = 10.0f;        // Scaling factor for launch strength (adjustable)
 
-    public GameMode currentGameMode = GameMode.Collect;
+    public GameMode currentGameMode = GameMode.None;
 
+
+    void Awake()
+    {
+        
+        gridCellSize = 2.1f * particleRadius;
+        spatialGrid = new Dictionary<Vector3Int, List<Particle>>();
+    }
+    
     void Start()
     {
-        string mode = PlayerPrefs.GetString("GameMode", "Collect");
+        if (PlayerPrefs.HasKey("GameMode"))
+        {
+            string mode = PlayerPrefs.GetString("GameMode");
 
-        if (mode == "Smash")
-            currentGameMode = GameMode.Smash;
+            if (mode == "Smash")
+                currentGameMode = GameMode.Smash;
+            else if (mode == "Collect")
+                currentGameMode = GameMode.Collect;
+        }
         else
-            currentGameMode = GameMode.Collect;
+        {
+            currentGameMode = GameMode.None;
+        }
 
         Debug.Log("🚀 بدأنا اللعبة في وضع: " + currentGameMode);
     }
 
-    void Awake()
-    {
-        // Optimize grid cell size based on collision radius
-        gridCellSize = collisionDetectionRadius * 1.5f;
-        spatialGrid = new Dictionary<Vector3Int, List<Particle>>();
-
-        // Pre-calculate neighbor offsets
-        int index = 0;
-        for (int x = -1; x <= 1; x++)
-            for (int y = -1; y <= 1; y++)
-                for (int z = -1; z <= 1; z++)
-                    neighborOffsets[index++] = new Vector3Int(x, y, z);
-    }
 
     void Update()
     {
+
         timeAccumulator += Time.deltaTime;
         while (timeAccumulator >= fixedTimeStep)
         {
@@ -133,15 +118,6 @@ public class SimulationManager : MonoBehaviour
 
     void SimulatePhysicsStep(float deltaTime)
     {
-        int totalParticles = 0;
-        foreach (Body body in bodies)
-            totalParticles += body.particles.Count;
-
-        // Adaptive solver iterations based on particle count
-        int currentSolverIterations = adaptiveSolverIterations ?
-            Mathf.Max(1, solverIterations - (totalParticles / 10000)) : solverIterations;
-
-        // 1. Integrate particle positions
         foreach (Body body in bodies)
         {
             foreach (Particle p in body.particles)
@@ -150,74 +126,26 @@ public class SimulationManager : MonoBehaviour
             }
         }
 
-        // 2. Build spatial grid (only if optimization is enabled and we have many particles)
-        if (enableSpatialOptimization && totalParticles > 1000)
-        {
-            BuildSpatialGrid();
-
-            // 3. Detect collisions using spatial grid
-            DetectCollisionsOptimized();
-        }
-        else
-        {
-            // Fallback to simple collision detection for small systems
-            DetectCollisionsSimple();
-        }
-
-        // 4. Solve constraints and collisions
-        for (int i = 0; i < currentSolverIterations; i++)
-        {
-            // Solve constraints in batches for better cache performance
-            SolveConstraintsBatch();
-
-            // Solve collisions
-            foreach (CollisionPair pair in collisionPairs)
-            {
-                SolveCollision(pair, deltaTime);
-            }
-
-            // Apply ground collision
-            foreach (Body body in bodies)
-            {
-                foreach (Particle p in body.particles)
-                {
-                    body.ApplyGroundCollision(p);
-                }
-            }
-        }
-    }
-
-    void BuildSpatialGrid()
-    {
         spatialGrid.Clear();
-
         foreach (Body body in bodies)
         {
             foreach (Particle p in body.particles)
             {
                 Vector3Int cell = GetGridCell(p.position);
-                if (!spatialGrid.TryGetValue(cell, out List<Particle> cellParticles))
-                {
-                    cellParticles = new List<Particle>();
-                    spatialGrid[cell] = cellParticles;
-                }
-                cellParticles.Add(p);
+                if (!spatialGrid.ContainsKey(cell))
+                    spatialGrid[cell] = new List<Particle>();
+                spatialGrid[cell].Add(p);
             }
         }
-    }
 
-    void DetectCollisionsOptimized()
-    {
         collisionPairs.Clear();
-        checkedPairs.Clear();
-
+        HashSet<(Particle, Particle)> checkedPairs = new HashSet<(Particle, Particle)>();
         foreach (Body body1 in bodies)
         {
             foreach (Particle p1 in body1.particles)
             {
                 Vector3Int cell = GetGridCell(p1.position);
-                GetNeighborCellsOptimized(cell, neighborCells);
-
+                List<Vector3Int> neighborCells = GetNeighborCells(cell);
                 foreach (Vector3Int neighbor in neighborCells)
                 {
                     if (spatialGrid.TryGetValue(neighbor, out List<Particle> cellParticles))
@@ -225,82 +153,40 @@ public class SimulationManager : MonoBehaviour
                         foreach (Particle p2 in cellParticles)
                         {
                             if (p1 == p2 || p1.body == p2.body) continue;
-
-                            // Use ulong hash for faster pair checking
-                            ulong pairHash = GetPairHash(p1, p2);
-                            if (checkedPairs.Contains(pairHash)) continue;
-
-                            float minDistanceSqr = (p1.collisionRadius + p2.collisionRadius) * (p1.collisionRadius + p2.collisionRadius);
-                            float distanceSqr = (p1.position - p2.position).sqrMagnitude;
-
-                            if (distanceSqr < minDistanceSqr)
+                            if (checkedPairs.Contains((p2, p1))) continue;
+                            float minDistance = p1.collisionRadius + p2.collisionRadius;
+                            float distance = Vector3.Distance(p1.position, p2.position);
+                            if (distance < minDistance)
                             {
-                                collisionPairs.Add(new CollisionPair
-                                {
-                                    p1 = p1,
-                                    p2 = p2,
-                                    minDistanceSqr = minDistanceSqr
-                                });
-                                checkedPairs.Add(pairHash);
+                                collisionPairs.Add(new CollisionPair { p1 = p1, p2 = p2, minDistance = minDistance });
+                                checkedPairs.Add((p1, p2));
                             }
                         }
                     }
                 }
             }
         }
-    }
 
-    void DetectCollisionsSimple()
-    {
-        collisionPairs.Clear();
-        checkedPairs.Clear();
-
-        foreach (Body body1 in bodies)
+        for (int i = 0; i < solverIterations; i++)
         {
-            foreach (Particle p1 in body1.particles)
+            foreach (Body body in bodies)
             {
-                foreach (Body body2 in bodies)
+                foreach (DistanceConstraint constraint in body.constraints)
                 {
-                    if (body1 == body2) continue;
-
-                    foreach (Particle p2 in body2.particles)
-                    {
-                        ulong pairHash = GetPairHash(p1, p2);
-                        if (checkedPairs.Contains(pairHash)) continue;
-
-                        float minDistanceSqr = (p1.collisionRadius + p2.collisionRadius) * (p1.collisionRadius + p2.collisionRadius);
-                        float distanceSqr = (p1.position - p2.position).sqrMagnitude;
-
-                        if (distanceSqr < minDistanceSqr)
-                        {
-                            collisionPairs.Add(new CollisionPair
-                            {
-                                p1 = p1,
-                                p2 = p2,
-                                minDistanceSqr = minDistanceSqr
-                            });
-                            checkedPairs.Add(pairHash);
-                        }
-                    }
+                    constraint.Solve();
                 }
             }
-        }
-    }
 
-    void SolveConstraintsBatch()
-    {
-        // Process constraints in batches for better cache performance
-        const int batchSize = 64;
-
-        foreach (Body body in bodies)
-        {
-            int constraintCount = body.constraints.Count;
-            for (int i = 0; i < constraintCount; i += batchSize)
+            foreach (CollisionPair pair in collisionPairs)
             {
-                int endIndex = Mathf.Min(i + batchSize, constraintCount);
-                for (int j = i; j < endIndex; j++)
+                SolveCollision(pair, deltaTime);
+            }
+
+            foreach (Body body in bodies)
+            {
+                foreach (Particle p in body.particles)
                 {
-                    body.constraints[j].Solve();
+                    body.ApplyGroundCollision(p);
                 }
             }
         }
@@ -315,37 +201,27 @@ public class SimulationManager : MonoBehaviour
         );
     }
 
-    void GetNeighborCellsOptimized(Vector3Int cell, List<Vector3Int> neighbors)
+    List<Vector3Int> GetNeighborCells(Vector3Int cell)
     {
-        neighbors.Clear();
-        for (int i = 0; i < neighborOffsets.Length; i++)
-        {
-            neighbors.Add(cell + neighborOffsets[i]);
-        }
-    }
-
-    ulong GetPairHash(Particle p1, Particle p2)
-    {
-        // Create a unique hash for particle pairs, ensuring p1 < p2 for consistency
-        if (p1.GetHashCode() < p2.GetHashCode())
-            return ((ulong)p1.GetHashCode() << 32) | (ulong)p2.GetHashCode();
-        else
-            return ((ulong)p2.GetHashCode() << 32) | (ulong)p1.GetHashCode();
+        List<Vector3Int> neighbors = new List<Vector3Int>();
+        for (int x = -1; x <= 1; x++)
+            for (int y = -1; y <= 1; y++)
+                for (int z = -1; z <= 1; z++)
+                    neighbors.Add(cell + new Vector3Int(x, y, z));
+        return neighbors;
     }
 
     void SolveCollision(CollisionPair pair, float deltaTime)
     {
         Particle p1 = pair.p1;
         Particle p2 = pair.p2;
-        float minDistanceSqr = pair.minDistanceSqr;
+        float minDistance = pair.minDistance;
 
         Vector3 delta = p2.position - p1.position;
-        float currentDistanceSqr = delta.sqrMagnitude;
+        float currentDistance = delta.magnitude;
 
-        if (currentDistanceSqr >= minDistanceSqr || currentDistanceSqr < 0.0001f) return;
+        if (currentDistance >= minDistance || currentDistance < 0.0001f) return;
 
-        float currentDistance = Mathf.Sqrt(currentDistanceSqr);
-        float minDistance = Mathf.Sqrt(minDistanceSqr);
         float overlap = minDistance - currentDistance;
         Vector3 correctionNormal = delta / currentDistance;
         Vector3 totalCorrection = correctionNormal * overlap;
@@ -360,28 +236,29 @@ public class SimulationManager : MonoBehaviour
             p1.position -= totalCorrection * (invMass1 / totalInverseMass);
         if (!p2.isFixed)
             p2.position += totalCorrection * (invMass2 / totalInverseMass);
-    }
 
+    }
     private Body GetSelectedBody(Ray ray, float threshold)
     {
         Body closestBody = null;
-        float minDistSqr = float.MaxValue;
-        float thresholdSqr = threshold * threshold;
-
+        float minDist = float.MaxValue;
         foreach (Body body in bodies)
         {
             foreach (Particle p in body.particles)
             {
                 // Find the closest point on the ray to the particle
                 Vector3 pointOnRay = ray.origin + ray.direction * Vector3.Dot(p.position - ray.origin, ray.direction);
-                float distSqr = (p.position - pointOnRay).sqrMagnitude;
-                if (distSqr < thresholdSqr && distSqr < minDistSqr)
+                float dist = Vector3.Distance(p.position, pointOnRay);
+                if (dist < threshold && dist < minDist)
                 {
-                    minDistSqr = distSqr;
+                    minDist = dist;
                     closestBody = body;
                 }
             }
         }
         return closestBody;
     }
+
+  
+
 }
