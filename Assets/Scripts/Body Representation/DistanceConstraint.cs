@@ -1,53 +1,67 @@
+
 using UnityEngine;
+using System.Collections.Generic;
+
 
 /// <summary>
-/// Represents a spring-like constraint that tries to maintain a fixed distance between two particles.
+/// Robust distance constraint with proper mass handling and relaxation
 /// </summary>
 public class DistanceConstraint
 {
     public Particle p1, p2;
-    public float restLength;    // The target distance for the spring
-    public float stiffness = 1.0f;  // How strongly the constraint corrects errors (0-1 for PBD)
+    public float restLength;
+    public float stiffness;
+    private float restLengthSqr;
 
-    public DistanceConstraint(Particle particle1, Particle particle2, float stiffness = 1.0f)
+    public DistanceConstraint(Particle particle1, Particle particle2, float stiffness = 1f)
     {
-        this.p1 = particle1;
-        this.p2 = particle2;
-        this.stiffness = stiffness;
-        this.restLength = Vector3.Distance(particle1.position, particle2.position);
+        p1 = particle1;
+        p2 = particle2;
+        this.stiffness = Mathf.Clamp01(stiffness);
+
+        // Calculate rest length from initial positions
+        restLength = Vector3.Distance(p1.position, p2.position);
+        restLengthSqr = restLength * restLength;
+    }
+
+    public DistanceConstraint(Particle particle1, Particle particle2, float restLength, float stiffness = 1f)
+    {
+        p1 = particle1;
+        p2 = particle2;
+        this.restLength = restLength;
+        this.stiffness = Mathf.Clamp01(stiffness);
+        restLengthSqr = restLength * restLength;
     }
 
     /// <summary>
-    /// Solves the constraint by adjusting particle positions to meet the restLength.
+    /// Solve constraint using mass-weighted corrections for stability
     /// </summary>
     public void Solve()
     {
         Vector3 delta = p2.position - p1.position;
-        float currentDistance = delta.magnitude;
+        float currentLength = delta.magnitude;
 
-        if (currentDistance < 0.0001f) return; // Avoid division by zero if particles are coincident
+        if (currentLength < 0.001f) return; // Avoid division by zero
 
-        float error = currentDistance - restLength;
-        if (Mathf.Abs(error) < 0.0001f) return; // Already satisfied
+        float difference = currentLength - restLength;
 
-        Vector3 correctionNormal = delta / currentDistance; // Direction of correction
-        Vector3 totalCorrection = correctionNormal * error * stiffness;
+        // Early exit if constraint is already satisfied
+        if (Mathf.Abs(difference) < 0.001f) return;
 
-        // Use cached inverse mass for better performance
-        float invMass1 = p1.InvMass;
-        float invMass2 = p2.InvMass;
-        float totalInverseMass = invMass1 + invMass2;
+        Vector3 direction = delta / currentLength;
+        float totalMass = p1.InvMass + p2.InvMass;
 
-        if (totalInverseMass == 0f) return; // Both particles are fixed or have infinite mass
+        if (totalMass < 0.001f) return; // Both particles fixed
 
-        // Distribute correction based on inverse mass
-        if (invMass1 > 0f)
-        {
-            p1.position += totalCorrection * (invMass1 / totalInverseMass);
-        }
-        if (invMass2 > 0f)
-        {
-            p2.position -= totalCorrection * (invMass2 / totalInverseMass);
-        }
+        // Calculate mass-weighted corrections
+        float correctionMagnitude = difference * stiffness * 0.5f;
+        Vector3 correction = direction * correctionMagnitude;
+
+        float mass1Ratio = p1.InvMass / totalMass;
+        float mass2Ratio = p2.InvMass / totalMass;
+
+        // Apply corrections
+        p1.ApplyCorrection(correction * mass1Ratio);
+        p2.ApplyCorrection(-correction * mass2Ratio);
     }
 }

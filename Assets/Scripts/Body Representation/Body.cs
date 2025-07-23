@@ -1,35 +1,40 @@
-using System.Collections.Generic;
 using UnityEngine;
+using System.Collections.Generic;
+
 
 /// <summary>
-/// هذا السكربت يتيح محاكاة جسم ناعم أو مرن باستخدام الجسيمات والقيود.
-/// يتعامل مع التكامل الفيزيائي، حلّ القيود، والتصادم مع الأرض.
+/// Robust Body controller with proper constraint solving and stability features
 /// </summary>
 public class Body : MonoBehaviour
 {
-    // قائمة الجسيمات المرتبطة بهذا الجسم
     [Header("Particles and Constraints")]
     public List<Particle> particles = new List<Particle>();
     public List<DistanceConstraint> constraints = new List<DistanceConstraint>();
+    public List<ShapeMatchingConstraint> shapeMatchingConstraints = new List<ShapeMatchingConstraint>();
 
-    // إعدادات الفيزياء الأساسية
     [Header("Physics Settings")]
-    public Vector3 gravity = new Vector3(0, -9.81f, 0);   // قوة الجاذبية
-    public float fixedTimeStep = 0.0167f;                   // خطوة الزمن الفيزيائية الثابتة (مثل FixedUpdate)
-    public int solverIterations = 3;                     // عدد مرات حل القيود في كل إطار
-    public float groundRestitution = 0.5f;                // معامل ارتداد الجسيمات عند اصطدامها بالأرض
+    public Vector3 gravity = new Vector3(0, -9.81f, 0);
+    public float fixedTimeStep = 0.0167f;
 
-    // إعدادات التصادم الأرضي
-    [Header("Collision Settings")]
-    public bool enableGroundCollision = true;             // هل نفعّل التصادم مع الأرض؟
-    public float groundY = 0f;                            // مستوى الأرض Y
+    [Header("Solver Settings")]
+    [Range(3, 20)]
+    public int solverIterations = 8; // Increased for stability
+    [Range(0.95f, 1.0f)]
+    public float globalDamping = 0.999f; // Less aggressive damping
 
-    // إعدادات التشغيل والتحكم
-    [Header("Simulation")]
-    public bool runSimulation = true;                     // هل نفعّل المحاكاة؟
-    private float timeAccumulator = 0f;                   // لتجميع الوقت وتطبيق المحاكاة بخطوات ثابتة
+    [Header("Ground Collision")]
+    public bool enableGroundCollision = true;
+    public float groundY = 0f;
+    public float groundRestitution = 0.3f; // Less bouncy
+    public float groundFriction = 0.8f; // Add friction
 
-    // دالة التحديث (تعادل FixedUpdate ولكن بطريقة يدوية)
+    [Header("Simulation Control")]
+    public bool runSimulation = true;
+    [Range(1, 4)]
+    public int subSteps = 2; // Sub-stepping for stability
+
+    private float timeAccumulator = 0f;
+
     void Update()
     {
         if (!runSimulation) return;
@@ -43,76 +48,106 @@ public class Body : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// خطوة فيزيائية واحدة: دمج الحركة ثم حل القيود
-    /// </summary>
     private void SimulatePhysicsStep(float deltaTime)
     {
-        // 1. دمج حركة الجسيمات (تطبيق الجاذبية وتحديث المواقع)
-        for (int i = 0; i < particles.Count; i++)
-        {
-            particles[i].Integrate(deltaTime, gravity);
-        }
+        float subDeltaTime = deltaTime / subSteps;
 
-        // 2. حلّ القيود بشكل متكرر لتحسين الدقة والثبات
-        for (int iter = 0; iter < solverIterations; iter++)
+        for (int subStep = 0; subStep < subSteps; subStep++)
         {
-            for (int i = 0; i < constraints.Count; i++)
+            // 1. Integration
+            foreach (var particle in particles)
             {
-                constraints[i].Solve();
+                particle.Integrate(subDeltaTime, gravity, globalDamping);
             }
 
-            // 3. تطبيق تصادم مع الأرض (إن وُجد)
-            if (enableGroundCollision)
+            // 2. Constraint solving with multiple iterations
+            for (int iter = 0; iter < solverIterations; iter++)
             {
-                for (int i = 0; i < particles.Count; i++)
+                // Solve distance constraints
+                foreach (var constraint in constraints)
                 {
-                    ApplyGroundCollision(particles[i]);
+                    constraint.Solve();
+                }
+
+                // Solve shape matching constraints
+                foreach (var shapeConstraint in shapeMatchingConstraints)
+                {
+                    shapeConstraint.Solve();
+                }
+
+                // Apply accumulated corrections
+                foreach (var particle in particles)
+                {
+                    particle.FinalizeCorrections();
+                }
+
+                // Ground collision
+                if (enableGroundCollision)
+                {
+                    foreach (var particle in particles)
+                    {
+                        ApplyGroundCollision(particle);
+                    }
                 }
             }
         }
     }
 
-    /// <summary>
-    /// يحل تصادم الجسيم مع الأرض عن طريق تعديل موضعه وسرعته بشكل فيزيائي
-    /// </summary>
     public void ApplyGroundCollision(Particle particle)
     {
-        if (particle.position.y < groundY)
+        if (particle.position.y <= groundY + particle.collisionRadius)
         {
-            // نثبّت الجسيم على الأرض
-            particle.position.y = groundY;
+            // Position correction
+            particle.position.y = groundY + particle.collisionRadius;
 
-            // نحسب السرعة التقريبية في الاتجاه Y باستخدام المواقع الحالية والسابقة
-            float velocityY = particle.position.y - particle.prevPosition.y;
+            // Velocity correction using proper Verlet integration
+            Vector3 velocity = particle.position - particle.prevPosition;
+            float normalVelocity = velocity.y;
 
-            // نعدّل الموضع السابق لمحاكاة ارتداد (باستخدام Verlet Integration)
-            particle.prevPosition.y = particle.position.y + velocityY * groundRestitution;
+            if (normalVelocity < 0) // Moving towards ground
+            {
+                // Apply restitution to normal component
+                velocity.y = -normalVelocity * groundRestitution;
+
+                // Apply friction to tangential components
+                velocity.x *= (1f - groundFriction);
+                velocity.z *= (1f - groundFriction);
+
+                // Update previous position to reflect new velocity
+                particle.prevPosition = particle.position - velocity;
+            }
         }
     }
 
-    /// <summary>
-    /// رسم الجسيمات والقيود في المشهد لأغراض التصحيح (Debug)
-    /// </summary>
     void OnDrawGizmos()
     {
         if (!Application.isPlaying || particles == null || particles.Count == 0)
             return;
 
-        // رسم الجسيمات ككرات صغيرة
-        Gizmos.color = Color.yellow;
-        for (int i = 0; i < particles.Count; i++)
+        // Draw particles with different colors based on state
+        foreach (var particle in particles)
         {
-            Gizmos.DrawSphere(particles[i].position, 0.05f);
+            Gizmos.color = particle.isFixed ? Color.red : particle.color;
+            Gizmos.DrawSphere(particle.position, particle.collisionRadius);
         }
 
-        // رسم القيود كخطوط بين الجسيمات
+        // Draw distance constraints
         Gizmos.color = Color.cyan;
-        for (int i = 0; i < constraints.Count; i++)
+        foreach (var constraint in constraints)
         {
-            var c = constraints[i];
-            if (c != null && c.p1 != null && c.p2 != null)
-                Gizmos.DrawLine(c.p1.position, c.p2.position);
+            if (constraint.p1 != null && constraint.p2 != null)
+            {
+                Gizmos.DrawLine(constraint.p1.position, constraint.p2.position);
+            }
+        }
+
+        // Draw ground plane
+        if (enableGroundCollision)
+        {
+            Gizmos.color = Color.green;
+            Vector3 center = transform.position;
+            center.y = groundY;
+            Gizmos.DrawCube(center, new Vector3(10f, 0.1f, 10f));
         }
     }
 }
