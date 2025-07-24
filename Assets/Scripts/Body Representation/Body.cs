@@ -29,6 +29,9 @@ public class Body : MonoBehaviour
     public bool runSimulation = true;                     // هل نفعّل المحاكاة؟
     private float timeAccumulator = 0f;                   // لتجميع الوقت وتطبيق المحاكاة بخطوات ثابتة
 
+        //=============================================================>
+
+
     // دالة التحديث (تعادل FixedUpdate ولكن بطريقة يدوية)
     void Update()
     {
@@ -42,6 +45,9 @@ public class Body : MonoBehaviour
             timeAccumulator -= fixedTimeStep;
         }
     }
+
+        //=============================================================>
+
 
     /// <summary>
     /// خطوة فيزيائية واحدة: دمج الحركة ثم حل القيود
@@ -73,11 +79,16 @@ public class Body : MonoBehaviour
         }
     }
 
+    //=============================================================>
+
     /// <summary>
     /// يحل تصادم الجسيم مع الأرض عن طريق تعديل موضعه وسرعته بشكل فيزيائي
     /// </summary>
     public void ApplyGroundCollision(Particle particle)
     {
+
+         if (particle.position.y >= groundY) return; 
+
         if (particle.position.y < groundY)
         {
             // نثبّت الجسيم على الأرض
@@ -90,6 +101,9 @@ public class Body : MonoBehaviour
             particle.prevPosition.y = particle.position.y + velocityY * groundRestitution;
         }
     }
+
+        //=============================================================>
+
 
     /// <summary>
     /// رسم الجسيمات والقيود في المشهد لأغراض التصحيح (Debug)
@@ -116,32 +130,30 @@ public class Body : MonoBehaviour
         }
     }
 
+        //=============================================================>
 
-    public void ApplySettings()
-{
-    // يمكنك إعادة ضبط الزمن المجمّع لضمان بداية نظيفة
-    timeAccumulator = 0f;
 
-    // إعادة تعيين مواقع وسرعات الجسيمات إذا لزم (مثال)
-    foreach (var particle in particles)
-    {
-        if (particle == null) continue;
+        public void ApplySettings()
+            {
+                // يمكنك إعادة ضبط الزمن المجمّع لضمان بداية نظيفة
+                timeAccumulator = 0f;
 
-        // مثلاً، إعادة الجاذبية ستؤثر مباشرة في `Integrate`
-        // ولكن يمكن أيضاً إعادة ضبط المواقع لتجنب القفزات المفاجئة
-        // أو إعادة تعيين السرعة غير الصريحة في Verlet عبر المواقع السابقة
-        particle.prevPosition = particle.position;
-    }
+                // إعادة تعيين مواقع وسرعات الجسيمات إذا لزم (مثال)
+                foreach (var particle in particles)
+                {
+                    if (particle == null) continue;
+                    particle.prevPosition = particle.position;
+                }
 
-    // إعادة حل القيود مرة لتأكيد الضبط الجديد
-    for (int i = 0; i < solverIterations; i++)
-    {
-        foreach (var constraint in constraints)
-        {
-            constraint?.Solve();
-        }
-    }
+                // إعادة حل القيود مرة لتأكيد الضبط الجديد
+                for (int i = 0; i < solverIterations; i++)
+                {
+                    foreach (var constraint in constraints)
+                    {
+                        constraint?.Solve();
+                    }
+                }
 
-    Debug.Log($"[Body] Settings reapplied on {name}.");
-}
+                Debug.Log($"[Body] Settings reapplied on {name}.");
+            }
 }

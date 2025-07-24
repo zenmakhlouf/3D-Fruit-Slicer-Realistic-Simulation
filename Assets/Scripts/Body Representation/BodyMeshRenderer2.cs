@@ -3,8 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
-///كل نقطة في الميش تتحرك نتيجة حركة الجسيمات القريبة منها.
-///كل نقطة تصبح مرتبطة بعدة جسيمات قريبة مع تأثير موزون.
+/// كل نقطة في الميش تتحرك نتيجة حركة الجسيمات القريبة منها.
+/// كل نقطة تصبح مرتبطة بعدة جسيمات قريبة مع تأثير موزون.
 /// ليقوم بتحديث شكل المجسم بشكل ناعم أثناء المحاكاة.
 /// </summary>
 [RequireComponent(typeof(MeshFilter))]
@@ -32,7 +32,33 @@ public class BodyMeshRenderer2 : MonoBehaviour
     public int maxInfluencers = 2;              // الحد الأقصى للجسيمات المؤثرة على كل نقطة
     public float updateInterval = 0.01f;        // الزمن بين تحديثات الشكل (مثلاً 0.02 = 50FPS)
 
+        //=============================================================>
+
+
     private float timer = 0f;
+
+    // تعريف هيكل المفتاح الخاص بشبكة الفضاء
+    private struct GridKey
+    {
+        public int x, y, z;
+        public GridKey(int x, int y, int z)
+        {
+            this.x = x; this.y = y; this.z = z;
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is GridKey key && x == key.x && y == key.y && z == key.z;
+        }
+
+        public override int GetHashCode()
+        {
+            // أعداد أولية لتقليل تصادمات الـ hash
+            return x * 73856093 ^ y * 19349663 ^ z * 83492791;
+        }
+    }
+
+    //=============================================================>
 
     void Start()
     {
@@ -56,15 +82,31 @@ public class BodyMeshRenderer2 : MonoBehaviour
         StartCoroutine(InitializeBindingWhenReady());
     }
 
-    /// <summary>
-    /// الانتظار حتى تكون الجسيمات جاهزة ثم إجراء الربط.
-    /// </summary>
+    //=============================================================>
+
     IEnumerator InitializeBindingWhenReady()
     {
         while (body.particles == null || body.particles.Count == 0)
             yield return null;
 
         vertexInfluences = new List<Influence>[originalVertices.Length];
+
+        // إنشاء شبكة الفضاء وتعبئتها بالجسيمات
+        Dictionary<GridKey, List<int>> spatialGrid = new();
+        float cellSize = influenceRadius;
+
+        for (int i = 0; i < body.particles.Count; i++)
+        {
+            Vector3 pos = body.particles[i].position;
+            GridKey key = GetGridKey(pos, cellSize);
+
+            if (!spatialGrid.TryGetValue(key, out var list))
+            {
+                list = new List<int>();
+                spatialGrid[key] = list;
+            }
+            list.Add(i);
+        }
 
         for (int i = 0; i < originalVertices.Length; i++)
         {
@@ -73,11 +115,28 @@ public class BodyMeshRenderer2 : MonoBehaviour
             Vector3 worldVertex = cachedTransform.TransformPoint(originalVertices[i]);
             List<(int index, float dist)> nearbyParticles = new();
 
-            for (int j = 0; j < body.particles.Count; j++)
+            GridKey vertexKey = GetGridKey(worldVertex, cellSize);
+
+            // فحص الخلايا المحيطة (27 خلية)
+            for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+            for (int dz = -1; dz <= 1; dz++)
             {
-                float dist = Vector3.Distance(worldVertex, body.particles[j].position);
-                if (dist <= influenceRadius)
-                    nearbyParticles.Add((j, dist));
+                GridKey neighborKey = new GridKey(
+                    vertexKey.x + dx,
+                    vertexKey.y + dy,
+                    vertexKey.z + dz
+                );
+
+                if (spatialGrid.TryGetValue(neighborKey, out var particleIndices))
+                {
+                    foreach (int j in particleIndices)
+                    {
+                        float dist = Vector3.Distance(worldVertex, body.particles[j].position);
+                        if (dist <= influenceRadius)
+                            nearbyParticles.Add((j, dist));
+                    }
+                }
             }
 
             // ترتيب الجسيمات حسب المسافة الأقرب
@@ -110,9 +169,19 @@ public class BodyMeshRenderer2 : MonoBehaviour
         isInitialized = true;
     }
 
-    /// <summary>
-    /// نقوم بتحديث نقاط الشبكة بناءً على حركة الجسيمات (بتأخير حسب FPS المطلوب)
-    /// </summary>
+    //=============================================================>
+
+    private GridKey GetGridKey(Vector3 position, float cellSize)
+    {
+        return new GridKey(
+            Mathf.FloorToInt(position.x / cellSize),
+            Mathf.FloorToInt(position.y / cellSize),
+            Mathf.FloorToInt(position.z / cellSize)
+        );
+    }
+
+ //=============================================================>
+
     void LateUpdate()
     {
         if (!isInitialized) return;
@@ -141,8 +210,6 @@ public class BodyMeshRenderer2 : MonoBehaviour
         }
 
         mesh.vertices = deformedVertices;
-
-        // إذا لاحظت تشوهات كبيرة، فكّر بتفعيل السطر التالي:
         mesh.RecalculateBounds();
     }
 }

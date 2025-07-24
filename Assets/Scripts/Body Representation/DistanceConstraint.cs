@@ -9,6 +9,9 @@ public class DistanceConstraint
     public float restLength;    // The target distance for the spring
     public float stiffness = 1.0f;  // How strongly the constraint corrects errors (0-1 for PBD)
 
+        //=============================================================>
+
+
     public DistanceConstraint(Particle particle1, Particle particle2, float stiffness = 1.0f)
     {
         this.p1 = particle1;
@@ -16,6 +19,9 @@ public class DistanceConstraint
         this.stiffness = stiffness;
         this.restLength = Vector3.Distance(particle1.position, particle2.position);
     }
+
+        //=============================================================>
+
 
     /// <summary>
     /// Solves the constraint by adjusting particle positions to meet the restLength.

@@ -1948,7 +1948,7 @@ MonoBehaviour:
   resolution: 5
   totalMass: 1
   stiffness: 1
-  connectionRadius: 0.3
+  connectionRadius: 0.4
   includeSurfaceVertices: 1
   includeInternalParticles: 1
 --- !u!64 &780296874

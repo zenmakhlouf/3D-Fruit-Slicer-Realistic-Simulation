@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 public enum GameMode
 {
@@ -36,6 +37,8 @@ public class SimulationManager : MonoBehaviour
     public GameMode currentGameMode = GameMode.None;
 
 
+    //=============================================================>
+
     void Awake()
     {
         
@@ -43,6 +46,8 @@ public class SimulationManager : MonoBehaviour
         spatialGrid = new Dictionary<Vector3Int, List<Particle>>();
     }
     
+    //=============================================================>
+
     void Start()
     {
         if (PlayerPrefs.HasKey("GameMode"))
@@ -61,6 +66,8 @@ public class SimulationManager : MonoBehaviour
 
         Debug.Log("🚀 بدأنا اللعبة في وضع: " + currentGameMode);
     }
+
+    //=============================================================>
 
 
     void Update()
@@ -116,81 +123,109 @@ public class SimulationManager : MonoBehaviour
         }
     }
 
-    void SimulatePhysicsStep(float deltaTime)
-    {
-        foreach (Body body in bodies)
-        {
-            foreach (Particle p in body.particles)
-            {
-                p.Integrate(deltaTime, body.gravity);
-            }
-        }
 
-        spatialGrid.Clear();
-        foreach (Body body in bodies)
+    //=============================================================>
+
+ void SimulatePhysicsStep(float deltaTime)
+{
+    // 1. التكامل الفيزيائي (Integration)
+    Parallel.ForEach(bodies, body =>
+    {
+        foreach (Particle p in body.particles)
         {
-            foreach (Particle p in body.particles)
+            p.Integrate(deltaTime, body.gravity);
+        }
+    });
+
+    // 2. بناء الشبكة المكانية (Spatial Hash Grid)
+    spatialGrid.Clear();
+    foreach (Body body in bodies)
+    {
+        foreach (Particle p in body.particles)
+        {
+            Vector3Int cell = GetGridCell(p.position);
+            lock (spatialGrid)
             {
-                Vector3Int cell = GetGridCell(p.position);
                 if (!spatialGrid.ContainsKey(cell))
                     spatialGrid[cell] = new List<Particle>();
                 spatialGrid[cell].Add(p);
             }
         }
+    }
 
-        collisionPairs.Clear();
-        HashSet<(Particle, Particle)> checkedPairs = new HashSet<(Particle, Particle)>();
-        foreach (Body body1 in bodies)
+    // 3. اكتشاف التصادمات (Collision Detection)
+    collisionPairs.Clear();
+    HashSet<(Particle, Particle)> checkedPairs = new HashSet<(Particle, Particle)>();
+    object collisionLock = new object();
+
+    Parallel.ForEach(bodies, body1 =>
+    {
+        foreach (Particle p1 in body1.particles)
         {
-            foreach (Particle p1 in body1.particles)
+            Vector3Int cell = GetGridCell(p1.position);
+            List<Vector3Int> neighborCells = GetNeighborCells(cell);
+
+            foreach (Vector3Int neighbor in neighborCells)
             {
-                Vector3Int cell = GetGridCell(p1.position);
-                List<Vector3Int> neighborCells = GetNeighborCells(cell);
-                foreach (Vector3Int neighbor in neighborCells)
+                if (spatialGrid.TryGetValue(neighbor, out List<Particle> cellParticles))
                 {
-                    if (spatialGrid.TryGetValue(neighbor, out List<Particle> cellParticles))
+                    foreach (Particle p2 in cellParticles)
                     {
-                        foreach (Particle p2 in cellParticles)
+                        if (p1 == p2 || p1.body == p2.body) continue;
+                        var pair = (p1, p2);
+                        var reversePair = (p2, p1);
+
+                        lock (checkedPairs)
                         {
-                            if (p1 == p2 || p1.body == p2.body) continue;
-                            if (checkedPairs.Contains((p2, p1))) continue;
-                            float minDistance = p1.collisionRadius + p2.collisionRadius;
-                            float distance = Vector3.Distance(p1.position, p2.position);
-                            if (distance < minDistance)
+                            if (checkedPairs.Contains(reversePair)) continue;
+                            checkedPairs.Add(pair);
+                        }
+
+                        float minDistance = p1.collisionRadius + p2.collisionRadius;
+                        float distance = Vector3.Distance(p1.position, p2.position);
+                        if (distance < minDistance)
+                        {
+                            lock (collisionLock)
                             {
                                 collisionPairs.Add(new CollisionPair { p1 = p1, p2 = p2, minDistance = minDistance });
-                                checkedPairs.Add((p1, p2));
                             }
                         }
                     }
                 }
             }
         }
+    });
 
-        for (int i = 0; i < solverIterations; i++)
+    // 4. تطبيق القيود وحل التصادمات
+    for (int i = 0; i < solverIterations; i++)
+    {
+        // Solve constraints
+        Parallel.ForEach(bodies, body =>
         {
-            foreach (Body body in bodies)
+            foreach (DistanceConstraint constraint in body.constraints)
             {
-                foreach (DistanceConstraint constraint in body.constraints)
-                {
-                    constraint.Solve();
-                }
+                constraint.Solve();
             }
+        });
 
-            foreach (CollisionPair pair in collisionPairs)
-            {
-                SolveCollision(pair, deltaTime);
-            }
-
-            foreach (Body body in bodies)
-            {
-                foreach (Particle p in body.particles)
-                {
-                    body.ApplyGroundCollision(p);
-                }
-            }
+        // Solve collisions (سطر تسلسلي لأن الحل قد يغير المواقع)
+        foreach (CollisionPair pair in collisionPairs)
+        {
+            SolveCollision(pair, deltaTime);
         }
+
+        // Apply ground collision (ممكن أيضًا توازيه)
+        Parallel.ForEach(bodies, body =>
+        {
+            foreach (Particle p in body.particles)
+            {
+                body.ApplyGroundCollision(p);
+            }
+        });
     }
+}
+
+    //=============================================================>
 
     Vector3Int GetGridCell(Vector3 position)
     {
@@ -201,6 +236,8 @@ public class SimulationManager : MonoBehaviour
         );
     }
 
+    //=============================================================>
+
     List<Vector3Int> GetNeighborCells(Vector3Int cell)
     {
         List<Vector3Int> neighbors = new List<Vector3Int>();
@@ -210,6 +247,8 @@ public class SimulationManager : MonoBehaviour
                     neighbors.Add(cell + new Vector3Int(x, y, z));
         return neighbors;
     }
+
+    //=============================================================>
 
     void SolveCollision(CollisionPair pair, float deltaTime)
     {
@@ -238,6 +277,9 @@ public class SimulationManager : MonoBehaviour
             p2.position += totalCorrection * (invMass2 / totalInverseMass);
 
     }
+
+        //=============================================================>
+
     private Body GetSelectedBody(Ray ray, float threshold)
     {
         Body closestBody = null;

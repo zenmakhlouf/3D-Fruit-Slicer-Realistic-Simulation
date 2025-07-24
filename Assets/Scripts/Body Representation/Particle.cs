@@ -9,9 +9,11 @@ public class Particle
     public Vector3 prevPosition;
     public float mass = 1f;
     public bool isFixed = false;
-    public Body body; // Reference to owning body (added for collision handling)
-    public float collisionRadius = 0.1f; // Default collision radius
+    public Body body; 
+    public float collisionRadius = 0.1f; 
     public Color color = Color.red;
+
+    //=============================================================>
 
     public Particle(Vector3 initialPosition, float mass, bool isFixed = false)
     {
@@ -20,6 +22,8 @@ public class Particle
         this.mass = mass;
         this.isFixed = isFixed;
     }
+
+    //=============================================================>
 
     public void Integrate(float deltaTime, Vector3 gravity, float damping = 0.98f)
     {
