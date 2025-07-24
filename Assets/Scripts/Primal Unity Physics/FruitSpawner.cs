@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.SceneManagement;
 
 public class FruitSpawner : MonoBehaviour
 {
@@ -14,6 +15,7 @@ public class FruitSpawner : MonoBehaviour
     public float spawnHeight = 20f;
     public SimulationManager simManager;
     public float bombSpawnChance = 0.2f;
+    public GameObject gameOverImage;
 
     [Header("Batch Settings")]
     private int fruitsPerBatch = 4;
@@ -33,6 +35,12 @@ public class FruitSpawner : MonoBehaviour
     private int sameTypeCount = 0;
     private const int maxSameTypeInRow = 2;
 
+
+    private int fallenFruitCount = 0;
+    public int maxFruitsBeforeStop = 4;
+    private bool gameEnded = false;
+
+
     private Coroutine spawnRoutine;
 
     private struct BatchState
@@ -43,15 +51,20 @@ public class FruitSpawner : MonoBehaviour
     }
 
     private BatchState currentBatch;
+    private Camera mainCamera;
 
     private void Start()
     {
+         gameOverImage.SetActive(false);
         PreparePools();
         InvokeRepeating(nameof(CleanupPool), cleanupInterval, cleanupInterval);
         UpdateGameModeObjects();
+        mainCamera = Camera.main;
     }
 
     private bool spawnStarted = false;
+
+//=============================================================>
 
 private void Update()
 {
@@ -64,10 +77,12 @@ private void Update()
     }
 }
 
-
+//=============================================================>
 
     private void UpdateGameModeObjects()
     {
+         bool isSmash = simManager.currentGameMode == GameMode.Smash;
+
         if (simManager == null) return;
 
         if (simManager.currentGameMode == GameMode.None)
@@ -83,7 +98,6 @@ private void Update()
             return;
         }
 
-        bool isSmash = simManager.currentGameMode == GameMode.Smash;
 
         if (hammerObject != null)
             hammerObject.SetActive(isSmash);
@@ -91,9 +105,11 @@ private void Update()
         if (basketObject != null)
             basketObject.SetActive(!isSmash);
 
-        spawnInterval = isSmash ? 4f : 2f;
+        spawnInterval = isSmash ? 4f : 1f;
     }
 
+
+//=============================================================>
 
     private void PreparePools()
     {
@@ -106,6 +122,8 @@ private void Update()
         allPrefabs.AddRange(fruitPrefabs);
         allPrefabs.AddRange(bombPrefabs);
     }
+
+//=============================================================>
 
     private void PreparePool(List<GameObject> prefabList, int countPerPrefab)
     {
@@ -128,14 +146,21 @@ private void Update()
         }
     }
 
+//=============================================================>
+
     private IEnumerator SpawnLoop()
     {
+        bool isSmash = simManager.currentGameMode == GameMode.Smash;
+
         while (true)
         {
             SpawnRandomObject();
+            if(isSmash) SpawnRandomObject();
             yield return new WaitForSeconds(spawnInterval);
         }
     }
+
+//=============================================================>
 
     private void SpawnRandomObject()
     {
@@ -159,14 +184,19 @@ private void Update()
             currentBatch.active = false;
     }
 
+//=============================================================>
+
     private Vector3 GenerateRandomPosition()
     {
-        Vector3 pos = Camera.main.transform.position + Camera.main.transform.forward * 25f;
+        Vector3 pos = mainCamera.transform.position + mainCamera.transform.forward * 25f;
         pos.x += Random.Range(-spawnArea.x / 2f, spawnArea.x / 2f);
         pos.z += Random.Range(-spawnArea.y / 2f, spawnArea.y / 2f);
         pos.y = spawnHeight;
         return pos;
     }
+
+    //=============================================================>
+
 
     private void SpawnSingleObject(Vector3 position)
     {
@@ -190,6 +220,8 @@ private void Update()
         }
     }
 
+//=============================================================>
+
     private bool DetermineNextType()
     {
         float forceSwitchChance = 0.1f + sameTypeCount * 0.2f;
@@ -208,6 +240,8 @@ private void Update()
         currentTypeIsBomb = result;
         return result;
     }
+
+//=============================================================>
 
     private GameObject GetFromPool(GameObject prefab)
     {
@@ -235,6 +269,8 @@ private void Update()
         return pooled.gameObject;
     }
 
+//=============================================================>
+
     private void ReturnToPool(GameObject prefab, GameObject obj)
     {
         if (obj == null) return;
@@ -249,16 +285,26 @@ private void Update()
 
         q.Enqueue(new PooledObject(obj));
     }
+//=============================================================>
 
-    private IEnumerator DisableAfterTime(GameObject obj, GameObject prefab, Body body, float time)
-    {
-        yield return new WaitForSeconds(time);
+private IEnumerator DisableAfterTime(GameObject obj, GameObject prefab, Body body, float time)
+{
+    yield return new WaitForSeconds(time);
 
-        if (obj != null && body != null && simManager?.bodies != null)
-            simManager.bodies.Remove(body);
+    if (obj != null && body != null && simManager?.bodies != null)
+        simManager.bodies.Remove(body);
 
-        ReturnToPool(prefab, obj);
-    }
+    ReturnToPool(prefab, obj);
+
+    // فقط عد الفواكه
+        fallenFruitCount++;
+
+        if (fallenFruitCount >= maxFruitsBeforeStop && !gameEnded)
+        {
+            EndGame();
+        }
+   }
+//=============================================================>
 
     private void CleanupPool()
     {
@@ -291,6 +337,7 @@ private void Update()
             }
         }
     }
+//=============================================================>
 
     private GameObject GetRandomPrefab()
     {
@@ -309,4 +356,28 @@ private void Update()
             lastUsedTime = Time.time;
         }
     }
+
+    private void EndGame()
+    {
+        gameEnded = true;
+
+        if (spawnRoutine != null)
+            StopCoroutine(spawnRoutine);
+
+        Debug.Log("اللعبة انتهت! وصلت إلى الحد الأقصى من الفواكه.");
+
+         if (gameOverImage != null)
+            gameOverImage.SetActive(true);
+
+        StartCoroutine(LoadMainMenuAfterDelay(3f));
+    
+        
+    }
+
+    private IEnumerator LoadMainMenuAfterDelay(float delay)
+{
+    yield return new WaitForSeconds(delay);
+    SceneManager.LoadScene("MainMenu");
+}
+
 }

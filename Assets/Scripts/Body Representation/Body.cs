@@ -29,6 +29,8 @@ public class Body : MonoBehaviour
     public bool runSimulation = true;                     // هل نفعّل المحاكاة؟
     private float timeAccumulator = 0f;                   // لتجميع الوقت وتطبيق المحاكاة بخطوات ثابتة
 
+    public bool hasBeenCut = false;
+
         //=============================================================>
 
 

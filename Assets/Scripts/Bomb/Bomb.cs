@@ -25,6 +25,8 @@ public class Bomb : MonoBehaviour
         }
     }
 
+//=============================================================>
+
     private void OnTriggerEnter(Collider other)
     {
         if (isHit) return;  // تأكد من عدم التكرار

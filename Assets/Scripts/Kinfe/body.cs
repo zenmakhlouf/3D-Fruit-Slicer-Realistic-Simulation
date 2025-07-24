@@ -20,6 +20,8 @@ public class Knife : MonoBehaviour
 }
 
 
+//=============================================================>
+
     void Update()
     {
         if (knifeCollider == null || simManager == null)
@@ -74,8 +76,17 @@ public class Knife : MonoBehaviour
         }
     }
 
+//=============================================================>
+
     void HandleCut(Body originalBody, List<Particle> cutParticles)
     {
+        if (originalBody == null || originalBody.particles == null || originalBody.hasBeenCut)
+         return;
+
+        // علّم الجسم بأنه قد تم قطعه
+        originalBody.hasBeenCut = true;
+
+
         if (originalBody == null || originalBody.particles == null)
         {
             // Debug.LogWarning("Original body or its particles are null!");
@@ -244,6 +255,9 @@ public class Knife : MonoBehaviour
 
     }
 
+
+//=============================================================>
+
     Vector3Int GetGridCell(Vector3 position, float cellSize)
     {
         return new Vector3Int(
@@ -253,6 +267,8 @@ public class Knife : MonoBehaviour
         );
     }
     
+
+//=============================================================>
 
     void RebuildConstraints(Body body, float connectionRadius, float stiffness)
     {
@@ -277,7 +293,6 @@ public class Knife : MonoBehaviour
         {
             if (p == null) continue;
             Vector3Int cell = GetGridCell(p.position, cellSize);
-            int maxLinks = 6;
 
             for (int x = -1; x <= 1; x++)
             for (int y = -1; y <= 1; y++)
@@ -302,6 +317,8 @@ public class Knife : MonoBehaviour
             }
         }
     }
+
+//=============================================================>
 
     void CleanupBodies()
 {
