@@ -133,6 +133,8 @@ private void Update()
         while (true)
         {
             SpawnRandomObject();
+            SpawnRandomObject();
+
             yield return new WaitForSeconds(spawnInterval);
         }
     }

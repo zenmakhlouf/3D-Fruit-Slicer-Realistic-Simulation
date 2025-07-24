@@ -107,7 +107,7 @@ if (GUI.Button(new Rect(70, y, 120, 30), "Apply on All"))
         body.groundRestitution = restitution;
         body.solverIterations = iterations;
 
-        body.ApplySettings();
+        //body.ApplySettings();
 
         // MeshBody properties
         var meshBody = body.GetComponent<MeshBody>();

@@ -2,146 +2,92 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// هذا السكربت يتيح محاكاة جسم ناعم أو مرن باستخدام الجسيمات والقيود.
-/// يتعامل مع التكامل الفيزيائي، حلّ القيود، والتصادم مع الأرض.
+/// Manages a collection of particles and constraints to simulate a physical object.
+/// Runs the physics simulation loop.
 /// </summary>
 public class Body : MonoBehaviour
 {
-    // قائمة الجسيمات المرتبطة بهذا الجسم
-    [Header("Particles and Constraints")]
     public List<Particle> particles = new List<Particle>();
     public List<DistanceConstraint> constraints = new List<DistanceConstraint>();
 
-    // إعدادات الفيزياء الأساسية
-    [Header("Physics Settings")]
-    public Vector3 gravity = new Vector3(0, -9.81f, 0);   // قوة الجاذبية
-    public float fixedTimeStep = 0.0167f;                   // خطوة الزمن الفيزيائية الثابتة (مثل FixedUpdate)
-    public int solverIterations = 3;                     // عدد مرات حل القيود في كل إطار
-    public float groundRestitution = 0.5f;                // معامل ارتداد الجسيمات عند اصطدامها بالأرض
+    [Header("Simulation Settings")]
+    public Vector3 gravity = new Vector3(0, -9.81f, 0);
+    public float fixedTimeStep = 0.02f; // Duration of each physics step
+    public int solverIterations = 10;   // Number of times constraints are solved per step
+    public float groundRestitution = 0.5f; // Bounciness of the ground (0-1)
 
-    // إعدادات التصادم الأرضي
-    [Header("Collision Settings")]
-    public bool enableGroundCollision = true;             // هل نفعّل التصادم مع الأرض؟
-    public float groundY = 0f;                            // مستوى الأرض Y
+    private float timeAccumulator = 0.0f; // Accumulates game time for fixed physics updates
 
-    // إعدادات التشغيل والتحكم
-    [Header("Simulation")]
-    public bool runSimulation = true;                     // هل نفعّل المحاكاة؟
-    private float timeAccumulator = 0f;                   // لتجميع الوقت وتطبيق المحاكاة بخطوات ثابتة
+    // void Update()
+    // {
+    //     // Use a fixed time step for stable and consistent physics simulation
+    //     timeAccumulator += Time.deltaTime;
+    //     while (timeAccumulator >= fixedTimeStep)
+    //     {
+    //         SimulatePhysicsStep(fixedTimeStep);
+    //         timeAccumulator -= fixedTimeStep;
+    //     }
+    // }
 
-    // دالة التحديث (تعادل FixedUpdate ولكن بطريقة يدوية)
-    void Update()
+    // void SimulatePhysicsStep(float deltaTime)
+    // {
+    //     // 1. Integrate particle positions (apply forces, update velocity and position)
+    //     foreach (Particle p in particles)
+    //     {
+    //         p.Integrate(deltaTime, gravity);
+    //     }
+
+    //     // 2. Solve all constraints iteratively to enforce shape and connections
+    //     for (int i = 0; i < solverIterations; i++)
+    //     {
+    //         foreach (DistanceConstraint constraint in constraints)
+    //         {
+    //             constraint.Solve();
+    //         }
+    //         // Apply ground collision as a hard constraint within the solver loop
+    //         foreach (Particle p in particles)
+    //         {
+    //             ApplyGroundCollision(p);
+    //         }
+    //     }
+    // }
+
+   public void ApplyGroundCollision(Particle particle)
     {
-        if (!runSimulation) return;
-
-        timeAccumulator += Time.deltaTime;
-
-        while (timeAccumulator >= fixedTimeStep)
+        if (particle.position.y < 0.0f)
         {
-            SimulatePhysicsStep(fixedTimeStep);
-            timeAccumulator -= fixedTimeStep;
+            // Move particle to be exactly on the ground
+            particle.position.y = 0.0f;
+
+            // Adjust previous position to simulate a bounce with Verlet integration.
+            // This effectively reflects the particle's vertical velocity component.
+            // Example: If prevPos.y = 0.1 (above ground) and particle integrated to -0.05.
+            // After clamping particle.position.y = 0.
+            // Effective velocity before bounce was (0 - 0.1) = -0.1 (using current pos and original prevPos).
+            // New prevPos.y becomes 0 + (-0.1 * groundRestitution) = -0.05 (if restitution is 0.5).
+            // Next frame, velocity estimate is (0 - (-0.05)) = 0.05, so it moves up.
+            float velocityYEstimate = particle.position.y - particle.prevPosition.y; // Uses new particle.position.y (0)
+            particle.prevPosition.y = particle.position.y + velocityYEstimate * groundRestitution;
         }
     }
 
-    /// <summary>
-    /// خطوة فيزيائية واحدة: دمج الحركة ثم حل القيود
-    /// </summary>
-    private void SimulatePhysicsStep(float deltaTime)
-    {
-        // 1. دمج حركة الجسيمات (تطبيق الجاذبية وتحديث المواقع)
-        for (int i = 0; i < particles.Count; i++)
-        {
-            particles[i].Integrate(deltaTime, gravity);
-        }
-
-        // 2. حلّ القيود بشكل متكرر لتحسين الدقة والثبات
-        for (int iter = 0; iter < solverIterations; iter++)
-        {
-            for (int i = 0; i < constraints.Count; i++)
-            {
-                constraints[i].Solve();
-            }
-
-            // 3. تطبيق تصادم مع الأرض (إن وُجد)
-            if (enableGroundCollision)
-            {
-                for (int i = 0; i < particles.Count; i++)
-                {
-                    ApplyGroundCollision(particles[i]);
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// يحل تصادم الجسيم مع الأرض عن طريق تعديل موضعه وسرعته بشكل فيزيائي
-    /// </summary>
-    public void ApplyGroundCollision(Particle particle)
-    {
-        if (particle.position.y < groundY)
-        {
-            // نثبّت الجسيم على الأرض
-            particle.position.y = groundY;
-
-            // نحسب السرعة التقريبية في الاتجاه Y باستخدام المواقع الحالية والسابقة
-            float velocityY = particle.position.y - particle.prevPosition.y;
-
-            // نعدّل الموضع السابق لمحاكاة ارتداد (باستخدام Verlet Integration)
-            particle.prevPosition.y = particle.position.y + velocityY * groundRestitution;
-        }
-    }
-
-    /// <summary>
-    /// رسم الجسيمات والقيود في المشهد لأغراض التصحيح (Debug)
-    /// </summary>
     void OnDrawGizmos()
     {
-        if (!Application.isPlaying || particles == null || particles.Count == 0)
-            return;
+        if (particles == null || !Application.isPlaying) return; // Only draw if particles exist and in play mode
 
-        // رسم الجسيمات ككرات صغيرة
+        // Draw particles
         Gizmos.color = Color.yellow;
-        for (int i = 0; i < particles.Count; i++)
+        foreach (Particle p in particles)
         {
-            Gizmos.DrawSphere(particles[i].position, 0.05f);
+            if (p != null) Gizmos.DrawSphere(p.position, 0.05f);
         }
 
-        // رسم القيود كخطوط بين الجسيمات
+        // Draw constraints
         Gizmos.color = Color.cyan;
-        for (int i = 0; i < constraints.Count; i++)
+        foreach (DistanceConstraint c in constraints)
         {
-            var c = constraints[i];
             if (c != null && c.p1 != null && c.p2 != null)
                 Gizmos.DrawLine(c.p1.position, c.p2.position);
         }
     }
-
-
-    public void ApplySettings()
-{
-    // يمكنك إعادة ضبط الزمن المجمّع لضمان بداية نظيفة
-    timeAccumulator = 0f;
-
-    // إعادة تعيين مواقع وسرعات الجسيمات إذا لزم (مثال)
-    foreach (var particle in particles)
-    {
-        if (particle == null) continue;
-
-        // مثلاً، إعادة الجاذبية ستؤثر مباشرة في `Integrate`
-        // ولكن يمكن أيضاً إعادة ضبط المواقع لتجنب القفزات المفاجئة
-        // أو إعادة تعيين السرعة غير الصريحة في Verlet عبر المواقع السابقة
-        particle.prevPosition = particle.position;
-    }
-
-    // إعادة حل القيود مرة لتأكيد الضبط الجديد
-    for (int i = 0; i < solverIterations; i++)
-    {
-        foreach (var constraint in constraints)
-        {
-            constraint?.Solve();
-        }
-    }
-
-    Debug.Log($"[Body] Settings reapplied on {name}.");
-}
 }
