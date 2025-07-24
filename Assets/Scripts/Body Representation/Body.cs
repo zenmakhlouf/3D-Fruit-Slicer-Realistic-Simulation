@@ -18,40 +18,6 @@ public class Body : MonoBehaviour
 
     private float timeAccumulator = 0.0f; // Accumulates game time for fixed physics updates
 
-    // void Update()
-    // {
-    //     // Use a fixed time step for stable and consistent physics simulation
-    //     timeAccumulator += Time.deltaTime;
-    //     while (timeAccumulator >= fixedTimeStep)
-    //     {
-    //         SimulatePhysicsStep(fixedTimeStep);
-    //         timeAccumulator -= fixedTimeStep;
-    //     }
-    // }
-
-    // void SimulatePhysicsStep(float deltaTime)
-    // {
-    //     // 1. Integrate particle positions (apply forces, update velocity and position)
-    //     foreach (Particle p in particles)
-    //     {
-    //         p.Integrate(deltaTime, gravity);
-    //     }
-
-    //     // 2. Solve all constraints iteratively to enforce shape and connections
-    //     for (int i = 0; i < solverIterations; i++)
-    //     {
-    //         foreach (DistanceConstraint constraint in constraints)
-    //         {
-    //             constraint.Solve();
-    //         }
-    //         // Apply ground collision as a hard constraint within the solver loop
-    //         foreach (Particle p in particles)
-    //         {
-    //             ApplyGroundCollision(p);
-    //         }
-    //     }
-    // }
-
    public void ApplyGroundCollision(Particle particle)
     {
         if (particle.position.y < 0.0f)
@@ -59,13 +25,6 @@ public class Body : MonoBehaviour
             // Move particle to be exactly on the ground
             particle.position.y = 0.0f;
 
-            // Adjust previous position to simulate a bounce with Verlet integration.
-            // This effectively reflects the particle's vertical velocity component.
-            // Example: If prevPos.y = 0.1 (above ground) and particle integrated to -0.05.
-            // After clamping particle.position.y = 0.
-            // Effective velocity before bounce was (0 - 0.1) = -0.1 (using current pos and original prevPos).
-            // New prevPos.y becomes 0 + (-0.1 * groundRestitution) = -0.05 (if restitution is 0.5).
-            // Next frame, velocity estimate is (0 - (-0.05)) = 0.05, so it moves up.
             float velocityYEstimate = particle.position.y - particle.prevPosition.y; // Uses new particle.position.y (0)
             particle.prevPosition.y = particle.position.y + velocityYEstimate * groundRestitution;
         }

@@ -30,9 +30,6 @@ public class GameControlPanel : MonoBehaviour
     void OnGUI()
     {
 
-        if (SceneManager.GetActiveScene().name != "testParticles")
-            return;
-            
         GUI.Box(new Rect(10, 10, 280, 700), "Body & Mesh Settings");
 
         int y = 40;
